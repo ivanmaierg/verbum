@@ -19,10 +19,16 @@ export type WelcomeScreenProps = {
   dispatch: (action: WelcomeAction) => void;
 };
 
-// Book-frame drawn from docs/ui-sketches.md:
-// Angled edges (╱/╲), two pages with scripture text, version between bottom edges,
-// drop-shadow ░░░. Hint line sits BELOW the outer frame (verses must breathe — no
-// decorations inside pages per ui-sketches.md).
+// Title block: wordmark + version. The version sits at the bottom-right corner
+// of the wordmark, padded to the wordmark's max line width so it always
+// right-aligns regardless of which figlet font/text is committed in banner.ts.
+const BANNER_WIDTH = Math.max(...BANNER.split("\n").map((l) => l.length));
+const TITLE = `${BANNER.trimEnd()}\n${WELCOME_VERSION.padStart(BANNER_WIDTH)}`;
+
+// Book-frame drawn from docs/ui-sketches.md, with a bookmark ribbon (señalador
+// de página) hanging from the right side. Angled edges (╱/╲), two pages with
+// scripture text, drop-shadow ░░░ underneath, then a vertical ribbon. Hint
+// line sits BELOW the ribbon. Verses breathe — no decorations inside pages.
 const BOOK_FRAME = `
  ╱‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾╲╱‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾╲
 │  ✦ Genesis 1:1                    │  ✦ John 3:16                      │
@@ -33,13 +39,19 @@ const BOOK_FRAME = `
 │  ${GENESIS_1_1_TEXT.slice(99).padEnd(33)} │  ${JOHN_3_16_TEXT.slice(99, 132).padEnd(33)} │
 │                                   │  ${JOHN_3_16_TEXT.slice(132).padEnd(33)} │
 │                                   │                                   │
- ╲___________________________________╱${WELCOME_VERSION.padStart(4)}___________________________╱
-   ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░`;
+ ╲___________________________________╱___________________________________╱
+   ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
+                                                                 ┃
+                                                                 ┃
+                                                                 ▼`;
 
-export function WelcomeScreen({ state: _state, dispatch: _dispatch }: WelcomeScreenProps) {
+export function WelcomeScreen({
+  state: _state,
+  dispatch: _dispatch,
+}: WelcomeScreenProps) {
   return (
     <box flexDirection="column">
-      <text>{BANNER}</text>
+      <text>{TITLE}</text>
       <text>{BOOK_FRAME}</text>
       <text>{"\n  ? help • q quit"}</text>
     </box>
