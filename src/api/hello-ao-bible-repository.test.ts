@@ -2,10 +2,10 @@ import { describe, it, expect, beforeEach, afterEach, spyOn } from "bun:test";
 import { createHelloAoBibleRepository } from "@/api/hello-ao-bible-repository";
 import { RawChapterResponseSchema } from "@/api/schemas";
 import { makeBookId } from "@/domain/book-id";
-import { makeTranslationId } from "@/domain/translations";
+import { DEFAULT_TRANSLATION_ID } from "@/domain/translations";
 import fixtureJson from "@/api/__fixtures__/john-3-bsb.json" with { type: "json" };
 
-const bsb = makeTranslationId("BSB");
+const bsb = DEFAULT_TRANSLATION_ID;
 const jhn = (() => {
   const r = makeBookId("JHN");
   if (!r.ok) throw new Error("test setup: JHN must be valid");

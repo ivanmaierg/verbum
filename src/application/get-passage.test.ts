@@ -4,7 +4,7 @@ import type { BibleRepository } from "@/application/ports/bible-repository";
 import type { Reference } from "@/domain/reference";
 import type { Chapter } from "@/domain/passage";
 import { makeBookId } from "@/domain/book-id";
-import { makeTranslationId } from "@/domain/translations";
+import { DEFAULT_TRANSLATION_ID } from "@/domain/translations";
 
 // Helpers to build typed test values without bypassing the factory — R6.
 function johnRef(verse: number): Reference {
@@ -19,7 +19,7 @@ function johnRef(verse: number): Reference {
 
 function makeChapter(verses: Array<{ number: number; text: string }>): Chapter {
   return {
-    translationId: makeTranslationId("BSB"),
+    translationId: DEFAULT_TRANSLATION_ID,
     book: (() => {
       const r = makeBookId("JHN");
       if (!r.ok) throw new Error("test setup");
