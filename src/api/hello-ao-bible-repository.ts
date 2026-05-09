@@ -57,20 +57,14 @@ export function createHelloAoBibleRepository(): BibleRepository {
           };
         }
 
-        // Filter chapter content to verse items only, then map to domain Verse.
-        const verses: Verse[] = parsed.data.chapter.content
-          .filter((item): item is typeof item & { type: "verse" } => {
-            const verseCheck = RawVerseSchema.safeParse(item);
-            return verseCheck.success;
-          })
-          .map((item) => {
-            // Safe: filter above guarantees the item matches RawVerseSchema.
-            const v = RawVerseSchema.parse(item);
-            return {
-              number: v.number,
-              text: toVerseText(v.content),
-            };
-          });
+        const verses: Verse[] = parsed.data.chapter.content.flatMap((item) => {
+          const verseCheck = RawVerseSchema.safeParse(item);
+          if (!verseCheck.success) return [];
+          return [{
+            number: verseCheck.data.number,
+            text: toVerseText(verseCheck.data.content),
+          }];
+        });
 
         const result: Chapter = {
           translationId,
