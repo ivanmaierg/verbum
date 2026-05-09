@@ -30,20 +30,21 @@ const TITLE = `${BANNER.trimEnd()}\n${WELCOME_VERSION.padStart(BANNER_WIDTH)}`;
 // scripture text, drop-shadow ░░░ underneath, then a vertical ribbon. Hint
 // line sits BELOW the ribbon. Verses breathe — no decorations inside pages.
 const BOOK_FRAME = `
+
  ╱‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾╲╱‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾╲
 │  ✦ Genesis 1:1                    │  ✦ John 3:16                      │
-│                                   │                                   │
+│   ‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾ │ ‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾   │
 │  ${GENESIS_1_1_TEXT.slice(0, 33).padEnd(33)} │  ${JOHN_3_16_TEXT.slice(0, 33).padEnd(33)} │
 │  ${GENESIS_1_1_TEXT.slice(33, 66).padEnd(33)} │  ${JOHN_3_16_TEXT.slice(33, 66).padEnd(33)} │
 │  ${GENESIS_1_1_TEXT.slice(66, 99).padEnd(33)} │  ${JOHN_3_16_TEXT.slice(66, 99).padEnd(33)} │
 │  ${GENESIS_1_1_TEXT.slice(99).padEnd(33)} │  ${JOHN_3_16_TEXT.slice(99, 132).padEnd(33)} │
 │                                   │  ${JOHN_3_16_TEXT.slice(132).padEnd(33)} │
 │                                   │                                   │
- ╲___________________________________╱___________________________________╱
-   ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
-                                                                 ┃
-                                                                 ┃
-                                                                 ▼`;
+ ╲__________________________________╲╱_________________________________╱
+  ╲░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░╲╱░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░╱
+                                                                  ┃
+                                                                /
+                                                                ▼`;
 
 export function WelcomeScreen({
   state: _state,
@@ -52,6 +53,7 @@ export function WelcomeScreen({
   return (
     <box flexDirection="column">
       <text>{TITLE}</text>
+
       <text>{BOOK_FRAME}</text>
       <text>{"\n  ? help • q quit"}</text>
     </box>
