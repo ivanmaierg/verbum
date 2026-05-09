@@ -89,3 +89,7 @@ Full details, principles, and the test the roadmap must pass: [docs/roadmap.md](
 3. **roadmap.md** — where it's going.
 4. **house-rules.md** — skim before writing TypeScript.
 5. **decisions/** — open when you ask "why was it built this way?".
+
+## License
+
+[MIT](LICENSE)
