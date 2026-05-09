@@ -1,0 +1,14 @@
+{
+  "name": "verbum",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "test": "bun test",
+    "build": "bun build --compile src/index.tsx --outfile verbum",
+    "dev": "bun run src/index.tsx"
+  },
+  "dependencies": {
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {}
+}
