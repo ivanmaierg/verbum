@@ -1,6 +1,6 @@
 // src/tui/welcome/welcome-screen.tsx — pure props-driven view for the welcome screen.
 // No useState for business state. No useEffect. No imports from domain/application/api.
-// The driver (tui-driver.ts) owns useReducer; this component is a pure view (REQ-2 / NFR-5).
+// The driver (tui-driver.tsx) owns useReducer; this component is a pure view (REQ-2 / NFR-5).
 //
 // OpenTUI primitives resolved from node_modules/@opentui/react:
 //   <box> — container with Yoga flexbox layout (BoxProps)
@@ -36,7 +36,7 @@ const BOOK_FRAME = `
  ╲___________________________________╱${WELCOME_VERSION.padStart(4)}___________________________╱
    ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░`;
 
-export function WelcomeScreen({ state: _state, dispatch: _dispatch }: WelcomeScreenProps): JSX.Element {
+export function WelcomeScreen({ state: _state, dispatch: _dispatch }: WelcomeScreenProps) {
   return (
     <box flexDirection="column">
       <text>{BANNER}</text>

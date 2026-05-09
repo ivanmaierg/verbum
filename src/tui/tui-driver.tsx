@@ -1,4 +1,4 @@
-// src/tui/tui-driver.ts — TUI runtime: renderer lifecycle, effect runner, Promise exit.
+// src/tui/tui-driver.tsx — TUI runtime: renderer lifecycle, effect runner, Promise exit.
 // This is the ONLY file that holds the OpenTUI renderer handle.
 // Reducer is called TWICE per dispatch (ADR-DESIGN-WELCOME-6): once to extract the effect,
 // once via baseDispatch to update React state. This is a TS-only quirk — Bubble Tea handles
@@ -22,10 +22,18 @@ import {
   welcomeReducer,
   initialWelcomeState,
   type WelcomeAction,
+  type WelcomeState,
   type Effect,
 } from "./welcome/welcome-reducer";
 import { WelcomeScreen } from "./welcome/welcome-screen";
 import type { CliRenderer } from "@opentui/core";
+
+// React's useReducer expects (state, action) => state. Our welcomeReducer returns
+// [state, effect] per the ADR 0009 dialect. reactReducer drops the effect for React's
+// purposes; the effect is read on the synchronous side via the dispatch wrapper inside
+// <App> (ADR-DESIGN-WELCOME-6, double-call pattern).
+const reactReducer = (s: WelcomeState, a: WelcomeAction): WelcomeState =>
+  welcomeReducer(s, a)[0];
 
 // --- Private helper ---
 
@@ -56,7 +64,7 @@ function App({
   renderer: CliRenderer;
   resolve: () => void;
 }) {
-  const [state, baseDispatch] = useReducer(welcomeReducer, initialWelcomeState);
+  const [state, baseDispatch] = useReducer(reactReducer, initialWelcomeState);
 
   // Custom dispatch wrapper — ADR-DESIGN-WELCOME-6:
   // Call reducer once to read the effect (pure, no IO), then baseDispatch for React state.
