@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test-and-compile:
+    name: Test and compile
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Run tests
+        run: bun test
+
+      - name: Compile binary
+        run: bun build --compile src/index.tsx --outfile ./verbum
+
+      - name: Smoke — john 3:16 (happy path, real HTTP)
+        run: |
+          output=$(./verbum john 3:16)
+          echo "$output"
+          echo "$output" | grep -qi "loved" || (echo "FAIL: expected 'loved' in output" && exit 1)
+
+      - name: Smoke — xyzzy 99:99 (parse error, exit 2)
+        run: |
+          ./verbum xyzzy 99:99 && exit 1 || [ $? -eq 2 ]
