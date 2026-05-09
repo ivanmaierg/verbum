@@ -5,10 +5,18 @@
   "scripts": {
     "test": "bun test",
     "build": "bun build --compile src/index.tsx --outfile verbum",
-    "dev": "bun run src/index.tsx"
+    "dev": "bun run src/index.tsx",
+    "generate:banner": "bun run scripts/generate-banner.ts"
   },
   "dependencies": {
+    "@opentui/core": "^0.2.6",
+    "@opentui/react": "^0.2.6",
+    "react": "^19.2.6",
     "zod": "^3.23.8"
   },
-  "devDependencies": {}
+  "devDependencies": {
+    "@types/figlet": "^1.7.0",
+    "@types/react": "^19.2.14",
+    "figlet": "^1.11.0"
+  }
 }
