@@ -1,0 +1,59 @@
+project: verbum
+created: 2026-05-09
+mode: hybrid
+
+context: |
+  TUI + CLI Bible reader. Hexagonal architecture (4 layers: domain,
+  application, infrastructure, presentation). Stack: Bun + TypeScript +
+  OpenTUI/React + Zod. Data source: Free Use Bible API (helloao.org).
+  v1 = minimal reader with command palette (Ctrl+K), favorite translations,
+  mouse + keyboard input, --format text|json|markdown one-shot CLI.
+  Roadmap goes to v11 (LLM/MCP server). 12 enforceable house rules in
+  docs/house-rules.md keep the architecture portable to a future Go
+  rewrite (Bubble Tea TUI). See docs/ for full planning.
+
+stack:
+  runtime: bun
+  language: typescript
+  ui: opentui-react
+  validation: zod
+  package_manager: bun
+
+architecture: hexagonal-screaming
+
+strict_tdd: false  # No test runner configured yet (no source code yet); flip to true once `bun test` is wired in v1 scaffolding
+
+testing:
+  runner: bun-test       # planned, not yet configured
+  layers:
+    unit: planned
+    integration: planned
+    e2e: not-planned
+  coverage: built-in     # bun test --coverage
+  linter: not-configured
+  type_checker: tsc
+  formatter: not-configured
+
+rules:
+  proposal:
+    - "Frame in terms of v1-v11 roadmap (docs/roadmap.md)"
+    - "Cite relevant ADRs from docs/decisions/"
+    - "Identify which house rules apply to the change"
+  spec:
+    - "Capability-driven; spec by domain (e.g., reading, navigation, persistence)"
+    - "Delta specs in change folder; merged into openspec/specs/ on archive"
+  design:
+    - "Hexagonal layering — arrows point inward; domain has zero IO/deps"
+    - "Apply house rules (docs/house-rules.md): Result<T, E>, no class outside React, ports as interfaces, Zod in src/api/ only"
+  tasks:
+    - "TDD ordering once test runner is configured (currently: standard mode)"
+    - "Each task small enough for one PR; cite house rule numbers in task descriptions where applicable"
+  apply:
+    - "Follow house rules — Rule 1 (no throw in domain), Rule 6 (branded ID factory), Rule 8 (useReducer for business state), Rule 9 (no useEffect for business logic)"
+    - "Cite rule numbers in commit messages where the rule shaped the implementation"
+  verify:
+    - "Match against spec deltas, not just task completion"
+    - "Spot-check house rule compliance in changed files"
+  archive:
+    - "Merge delta specs into openspec/specs/{domain}/spec.md"
+    - "Move change folder to openspec/changes/archive/YYYY-MM-DD-{change-name}/"
