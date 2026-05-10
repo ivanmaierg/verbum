@@ -21,7 +21,7 @@ stack:
 
 architecture: hexagonal-screaming
 
-strict_tdd: false  # No test runner configured yet (no source code yet); flip to true once `bun test` is wired in v1 scaffolding
+strict_tdd: true  # bun test is wired and used by every change; tests-first is the active default
 
 testing:
   runner: bun-test       # planned, not yet configured
@@ -46,7 +46,7 @@ rules:
     - "Hexagonal layering — arrows point inward; domain has zero IO/deps"
     - "Apply house rules (docs/house-rules.md): Result<T, E>, no class outside React, ports as interfaces, Zod in src/api/ only"
   tasks:
-    - "TDD ordering once test runner is configured (currently: standard mode)"
+    - "Strict TDD ordering: failing test first, then production code, bundled in same commit (work-unit-commits)"
     - "Each task small enough for one PR; cite house rule numbers in task descriptions where applicable"
   apply:
     - "Follow house rules — Rule 1 (no throw in domain), Rule 6 (branded ID factory), Rule 8 (useReducer for business state), Rule 9 (no useEffect for business logic)"
