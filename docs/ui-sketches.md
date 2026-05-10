@@ -4,63 +4,75 @@ Visual design for the TUI. ASCII mockups, style legend, focus states, and the ru
 
 ## Style legend
 
-OpenTUI supports color, borders, padding, dim/bright contrast, and focus highlighting. We use these deliberately, not decoratively.
+verbum is **monochrome minimal**. No hue. Every visual distinction is carried by terminal *attributes* (default fg, `dim`, `bold`, `inverse`) plus glyphs and layout. We respect the user's terminal theme — no hardcoded RGB fights their colorscheme — and `NO_COLOR` is honored for free because there is no color to disable.
 
-| Token | Purpose | Example |
-|---|---|---|
-| `primary` | Reading text, default UI | verse text, list items |
-| `accent` | Active selection, focus highlight | `▶` indicator, current verse, reference header |
-| `muted` | Secondary information | verse numbers, dividers, hints |
-| `dim` | Background views behind overlays | reading view when palette is open |
-| `error` | Errors and warnings | "Could not parse reference" |
-| `success` | Confirmations | "Translation saved" |
+| Token | OpenTUI attribute | Purpose | Example |
+|---|---|---|---|
+| `primary` | default fg, no attrs | The focal content — what the user came to read | verse text, palette query, list items |
+| `muted` | `TextAttributes.DIM` | Everything that frames or labels the focal content | borders, references, verse numbers, hints, drop shadows, status bar, section headers |
+| `emphasis` | `TextAttributes.BOLD` | Used sparingly for headers and warnings that need weight without a hue | reference header in Reading view, error title |
+| `selection` | `TextAttributes.INVERSE` | Active selection / focus highlight (replaces what color usually does) | currently-focused verse, palette top result, picker highlight |
+| `marker` | glyph in the gutter | Pre-attribute pointer that survives in piped output | `▶` next to the focused row |
 
-Borders: rounded corners on overlays (palette, pickers); square borders on full-screen views.
+**The rule that drives every styling decision: dim is the only "color".** Secondary elements fade; the primary content stays at fg default. This makes scripture visually loudest by virtue of being the only non-dim thing on screen.
+
+Borders: rounded corners on overlays (palette, pickers); square borders on full-screen views. Border characters themselves are `muted`.
 
 ## Visual identity
 
-The brand is **`verbum`** — Latin for "the Word" (John 1:1). The wordmark is rendered with `figlet` using the **Isometric1** font, generated at build/runtime via `bunx figlet -f Isometric1 verbum`.
+The brand is **`verbum`** — Latin for "the Word" (John 1:1). The wordmark is rendered with `figlet` using the **ANSI Shadow** font over the string `"Verbum"` (capital V), generated at build time by `bun run generate:banner` (script: `scripts/generate-banner.ts`) and committed to `src/cli/banner.ts` as a string constant.
+
+### Color philosophy
+
+Two absolutes that govern every screen:
+
+1. **Dim is the only "color".** No hue ever. The whole UI is built from default fg + `dim` + `bold` + `inverse`. References for the aesthetic: `fzf`, `tmux` base UI, `vim` without plugins. Ink on paper.
+2. **Verses must breathe.** Verse text is always default fg — never dim, never bold, never inverse, never decorated. In any composition, the chrome around the verse fades; the verse stays at full weight.
+
+A consequence worth naming: in the Welcome screen the two scripture snippets sitting inside the open-book illustration also follow rule 2. The book frame, page edges, drop shadow, ribbon, and reference labels (`✦ Genesis 1:1`) are all `muted`. The verse lines themselves are `primary`. The result reads as a quiet illustration where the words are the only thing fully lit.
+
+Red-letter editions (Jesus's words in red) were considered and explicitly rejected as a default. If revisited later, only as an opt-in toggle, never on by default.
 
 ### Welcome screen (first run + `verbum --help`)
 
-The full identity composition: Isometric1 wordmark over a 3D open-book frame with two pages of foundational scripture.
+The full identity composition: ANSI Shadow wordmark with the version right-aligned beneath it, then a two-page open-book frame whose top edges meet in a peak, a drop shadow anchoring it to the surface, and a bookmark ribbon hanging off the spine. Verses inside the book stay at default fg; everything else (chrome, refs, shadow, ribbon, hint) is `muted`.
 
 ```
-              ___           ___           ___           ___           ___
-             /\__\         /\  \         /\  \         /\  \         /\__\
-            /:/  /        /::\  \       /::\  \       /::\  \       /:/  /
-           /:/  /        /:/\:\  \     /:/\:\  \     /:/\:\  \     /:/  /
-          /:/__/  ___   /::\~\:\  \   /::\~\:\  \   /::\~\:\__\   /:/  /  ___
-          |:|  | /\__\ /:/\:\ \:\__\ /:/\:\ \:\__\ /:/\:\ \:|__| /:/__/  /\__\
-          |:|  |/:/  / \:\~\:\ \/__/ \/_|::\/:/  / \:\~\:\/:/  / \:\  \ /:/  /
-          |:|__/:/  /   \:\ \:\__\      |:|::/  /   \:\ \::/  /   \:\  /:/  /
-           \::::/__/     \:\ \/__/      |:|\/__/     \:\/:/  /     \:\/:/  /
-            ~~~~          \:\__\        |:|  |        \::/__/       \::/  /
-                           \/__/         \|__|         ~~            \/__/
 
-              ___________________________________________________
-            ╱                                                    ╲
-          ╱                                                        ╲
-        ╱─────────────────────────────────────────────────────────────╲
-       │                                │                              │
-       │   In the                       │   For God so loved           │
-       │   beginning                    │   the world that He          │
-       │   God created                  │   gave His only Son,         │
-       │   the heavens                  │   that all who believe       │
-       │   and the earth.               │   shall not perish.          │
-       │                                │                              │
-       │   ✦ Genesis 1:1                │   ✦ John 3:16                │
-        ╲─────────────────────────────────────────────────────────────╱
-          ╲                       v0.1.0                              ╱
-            ╲___________________________________________________________╱
-              ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
+██╗   ██╗███████╗██████╗ ██████╗ ██╗   ██╗███╗   ███╗
+██║   ██║██╔════╝██╔══██╗██╔══██╗██║   ██║████╗ ████║
+██║   ██║█████╗  ██████╔╝██████╔╝██║   ██║██╔████╔██║
+╚██╗ ██╔╝██╔══╝  ██╔══██╗██╔══██╗██║   ██║██║╚██╔╝██║
+ ╚████╔╝ ███████╗██║  ██║██████╔╝╚██████╔╝██║ ╚═╝ ██║
+  ╚═══╝  ╚══════╝╚═╝  ╚═╝╚═════╝  ╚═════╝ ╚═╝     ╚═╝
+                                               v0.1.0
+
+ ╱‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾╲╱‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾╲
+│  ✦ Genesis 1:1                    │  ✦ John 3:16                      │
+│   ‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾ │ ‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾   │
+│  In the beginning God created the │  For God so loved the world that  │
+│  heavens and the earth.           │  He gave His one and only Son,    │
+│                                   │  that everyone who believes in    │
+│                                   │  Him shall not perish but have    │
+│                                   │  eternal life.                    │
+│                                   │                                   │
+ ╲__________________________________╲╱_________________________________╱
+  ╲░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░╲╱░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░╱
+                                                                  ┃
+                                                                /
+                                                                ▼
+
+  ? help • q quit
 ```
 
 The 3D effect comes from:
 
-- Angled `╱` / `╲` edges suggesting an open book on a desk
-- Drop shadow `░░░` anchoring it on the surface
-- The Isometric1 wordmark's true-3D letterforms (built from `/\`, `:/\:`, `/__/` blocks)
+- The ANSI Shadow wordmark's block-shadow letterforms (`█` faces with `╗` `╝` `╚` `╔` shadow edges)
+- Twin angled `╱‾‾‾╲╱‾‾‾╲` top edges suggesting two pages cresting at the spine of an open book
+- The bookmark ribbon (`┃` `/` `▼`) dangling from the right page
+- Drop shadow `░░░` on the desk surface beneath the book
+
+> **Implementation note.** The verse text inside the book is currently sliced by character index in `welcome-screen.tsx` (33-char windows per page-row), which can break words mid-token (e.g. `"world that H"` / `"e gave..."`). The mockup above shows the intended word-aware layout; promoting the slicer to a word-aware wrapper is a known follow-up.
 
 ### `verbum --version` (compact)
 
@@ -69,17 +81,12 @@ When the welcome screen is overkill, just the wordmark plus a one-line tagline:
 ```
 $ verbum --version
 
-      ___           ___           ___           ___           ___
-     /\__\         /\  \         /\  \         /\  \         /\__\
-    /:/  /        /::\  \       /::\  \       /::\  \       /:/  /
-   /:/  /        /:/\:\  \     /:/\:\  \     /:/\:\  \     /:/  /
-  /:/__/  ___   /::\~\:\  \   /::\~\:\  \   /::\~\:\__\   /:/  /  ___
-  |:|  | /\__\ /:/\:\ \:\__\ /:/\:\ \:\__\ /:/\:\ \:|__| /:/__/  /\__\
-  |:|  |/:/  / \:\~\:\ \/__/ \/_|::\/:/  / \:\~\:\/:/  / \:\  \ /:/  /
-  |:|__/:/  /   \:\ \:\__\      |:|::/  /   \:\ \::/  /   \:\  /:/  /
-   \::::/__/     \:\ \/__/      |:|\/__/     \:\/:/  /     \:\/:/  /
-    ~~~~          \:\__\        |:|  |        \::/__/       \::/  /
-                   \/__/         \|__|         ~~            \/__/
+██╗   ██╗███████╗██████╗ ██████╗ ██╗   ██╗███╗   ███╗
+██║   ██║██╔════╝██╔══██╗██╔══██╗██║   ██║████╗ ████║
+██║   ██║█████╗  ██████╔╝██████╔╝██║   ██║██╔████╔██║
+╚██╗ ██╔╝██╔══╝  ██╔══██╗██╔══██╗██║   ██║██║╚██╔╝██║
+ ╚████╔╝ ███████╗██║  ██║██████╔╝╚██████╔╝██║ ╚═╝ ██║
+  ╚═══╝  ╚══════╝╚═╝  ╚═╝╚═════╝  ╚═════╝ ╚═╝     ╚═╝
 
   v0.1.0  ·  read scripture in your terminal  ·  bible.helloao.org
 ```
@@ -420,14 +427,16 @@ Schema-stable across versions. Each verse is a discrete object — an LLM can qu
 
 | Element | Style |
 |---|---|
-| Verse text | `primary`, normal weight |
+| Verse text | `primary`, normal weight — never decorated |
 | Verse number | `muted`, right-aligned in 3-char gutter |
-| Focused verse | `accent` background or left bar marker |
-| Reference header | `accent`, bold |
-| Translation tag | `muted`, italic or in parens |
+| Focused verse | `▶` `marker` in the gutter + `selection` (inverse) on the line |
+| Reference header | `emphasis` (bold), default fg |
+| Translation tag | `muted`, in parens |
 | Section headers (in palette / lists) | `muted`, slight indent |
-| Footnote markers | `accent`, superscript-style |
+| Footnote markers | `emphasis` (bold), superscript-style |
 | Keybind hints in status bar | `muted`, separated by `•` |
+| Error title (`⚠ ...`) | `emphasis` (bold), default fg — the `⚠` glyph carries the alarm, not a hue |
+| Background view behind an open overlay | unchanged — overlay border + position carry the focus, no extra dimming pass |
 
 ## What this doc is *not*
 
