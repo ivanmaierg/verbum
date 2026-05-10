@@ -32,6 +32,49 @@ const stubRepo: BibleRepository = {
   },
 };
 
+// Failing repo stub — simulates a network error from getChapter.
+const failingRepo: BibleRepository = {
+  getChapter: async () => ({
+    ok: false,
+    error: { kind: "network", message: "simulated failure" },
+  }),
+};
+
+describe("smoke — verbum vod exit-1 path (repo failure)", () => {
+  it("runVod returns 1 and writes network error to stderr when repo fails", async () => {
+    const fixed = new Date("2026-01-15"); // any deterministic date
+
+    let stderrCapture = "";
+    let stdoutCapture = "";
+
+    const origStderr = process.stderr.write.bind(process.stderr);
+    const origStdout = process.stdout.write.bind(process.stdout);
+
+    process.stderr.write = ((chunk: string | Uint8Array) => {
+      stderrCapture += typeof chunk === "string" ? chunk : Buffer.from(chunk).toString();
+      return true;
+    }) as typeof process.stderr.write;
+
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      stdoutCapture += typeof chunk === "string" ? chunk : Buffer.from(chunk).toString();
+      return true;
+    }) as typeof process.stdout.write;
+
+    let exitCode: number;
+    try {
+      exitCode = await runVod(fixed, failingRepo);
+    } finally {
+      process.stderr.write = origStderr;
+      process.stdout.write = origStdout;
+    }
+
+    expect(exitCode).toBe(1);
+    expect(stderrCapture).toContain("network failure");
+    // stdout must not contain verse content on failure
+    expect(stdoutCapture).toBe("");
+  });
+});
+
 describe("smoke — verbum vod happy path", () => {
   it("runVod with fixed Date prints the picked verse and exits 0", async () => {
     const fixed = new Date(2025, 2, 15); // Mar 15 → day 74 → VERSE_POOL[74]
