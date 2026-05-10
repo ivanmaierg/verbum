@@ -4,32 +4,37 @@ Visual design for the TUI. ASCII mockups, style legend, focus states, and the ru
 
 ## Style legend
 
-verbum is **monochrome minimal**. No hue. Every visual distinction is carried by terminal *attributes* (default fg, `dim`, `bold`, `inverse`) plus glyphs and layout. We respect the user's terminal theme — no hardcoded RGB fights their colorscheme — and `NO_COLOR` is honored for free because there is no color to disable.
+verbum is **monochrome with one accent**. One reserved hue (accent blue) signals interactivity; everything else is default fg / `dim` / `bold` / `inverse`. Every visual distinction is carried by terminal *attributes* plus glyphs, layout, and the single accent token. We respect the user's terminal theme — the accent is one fixed truecolor value that degrades gracefully — and `NO_COLOR` disables all escapes when set.
 
-| Token | OpenTUI attribute | Purpose | Example |
+| Token | OpenTUI attribute / escape | Purpose | Example |
 |---|---|---|---|
-| `primary` | default fg, no attrs | The focal content — what the user came to read | verse text, palette query, list items |
+| `text` | default fg, no attrs | The focal content — what the user came to read | verse text, palette query, list items |
 | `muted` | `TextAttributes.DIM` | Everything that frames or labels the focal content | borders, references, verse numbers, hints, drop shadows, status bar, section headers |
+| `accent` | truecolor `#5BA0F2` (opencode blue) | Signals interactivity or the wordmark; one reserved hue | wordmark "um" half, focused verse indicator, reference header |
+| `error` | ANSI 31 (standard red) | CLI error output; gated on `isColorEnabled(stderr)` | parse errors, network errors |
 | `emphasis` | `TextAttributes.BOLD` | Used sparingly for headers and warnings that need weight without a hue | reference header in Reading view, error title |
 | `selection` | `TextAttributes.INVERSE` | Active selection / focus highlight (replaces what color usually does) | currently-focused verse, palette top result, picker highlight |
 | `marker` | glyph in the gutter | Pre-attribute pointer that survives in piped output | `▶` next to the focused row |
 
-**The rule that drives every styling decision: dim is the only "color".** Secondary elements fade; the primary content stays at fg default. This makes scripture visually loudest by virtue of being the only non-dim thing on screen.
+**The rule that drives every styling decision: accent is the only hue.** Secondary elements fade via `dim`; the primary content stays at fg default. The single accent token marks what the user can act on. This keeps scripture visually loudest while the one hue guides attention.
 
 Borders: rounded corners on overlays (palette, pickers); square borders on full-screen views. Border characters themselves are `muted`.
 
 ## Visual identity
 
-The brand is **`verbum`** — Latin for "the Word" (John 1:1). The wordmark is rendered with `figlet` using the **ANSI Shadow** font over the string `"Verbum"` (capital V), generated at build time by `bun run generate:banner` (script: `scripts/generate-banner.ts`) and committed to `src/cli/banner.ts` as a string constant.
+The brand is **`verbum`** — Latin for "the Word" (John 1:1). The wordmark is rendered with `figlet` using the **ANSI Shadow** font, split into two halves: `"Verb"` (dim) and `"um"` (accent blue), generated at build time by `bun run generate:banner` (script: `scripts/generate-banner.ts`) and committed to `src/cli/banner.ts` as two string constants (`BANNER_DIM_PART`, `BANNER_ACCENT_PART`). The two-tone wordmark embodies the accent direction: one hue, one purpose.
 
 ### Color philosophy
 
-Two absolutes that govern every screen:
+Three tiers govern every surface. Everything maps to exactly one of them:
 
-1. **Dim is the only "color".** No hue ever. The whole UI is built from default fg + `dim` + `bold` + `inverse`. References for the aesthetic: `fzf`, `tmux` base UI, `vim` without plugins. Ink on paper.
-2. **Verses must breathe.** Verse text is always default fg — never dim, never bold, never inverse, never decorated. In any composition, the chrome around the verse fades; the verse stays at full weight.
+1. **`text`** — default fg, no attributes. Verse text always lives here. It is the only fully-lit thing on screen. Never dim, never decorated.
+2. **`muted`** — `TextAttributes.DIM`. Everything that frames or guides: borders, reference labels, chrome, hints, drop shadows. Fades so the verse breathes.
+3. **`accent`** (`#5BA0F2`, opencode blue) — one reserved hue. Used only where interactivity or identity must be named: the wordmark "um" half, focused state indicators, and the reference header in the Reading view. Gated on `isColorEnabled` so it degrades to plain text in pipes and `NO_COLOR` environments.
 
-A consequence worth naming: in the Welcome screen the two scripture snippets sitting inside the open-book illustration also follow rule 2. The book frame, page edges, drop shadow, ribbon, and reference labels (`✦ Genesis 1:1`) are all `muted`. The verse lines themselves are `primary`. The result reads as a quiet illustration where the words are the only thing fully lit.
+Error output uses the `error` token (ANSI 31 red) on `stderr`, also `isColorEnabled`-gated. It is not part of the three content tiers — it is a system signal, not a content attribute.
+
+**Verses must breathe.** Verse text is always `text` — never dim, never bold, never inverse, never decorated. The chrome fades; the verse stays at full weight.
 
 Red-letter editions (Jesus's words in red) were considered and explicitly rejected as a default. If revisited later, only as an opt-in toggle, never on by default.
 

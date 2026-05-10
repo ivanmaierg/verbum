@@ -4,10 +4,12 @@
 
 import type { ParseError, RepoError } from "@/domain/errors";
 import type { Passage } from "@/domain/passage";
+import { error, isColorEnabled } from "./ansi";
 
-// renderParseError — exhaustive switch with a never fallthrough — R5, REQ-11.
+// formatParseError — private, returns plain text. Public wrapper applies color gate.
+// Exhaustive switch with a never fallthrough — R5, REQ-11.
 // The unknown_book message MUST name the token so SCN-3 passes.
-export function renderParseError(err: ParseError): string {
+function formatParseError(err: ParseError): string {
   switch (err.kind) {
     case "empty_input":
       return "Error: reference cannot be empty. Try: verbum john 3:16";
@@ -26,7 +28,7 @@ export function renderParseError(err: ParseError): string {
   }
 }
 
-export function renderRepoError(err: RepoError): string {
+function formatRepoError(err: RepoError): string {
   switch (err.kind) {
     case "network":
       return `Error: network failure — ${err.message}`;
@@ -47,7 +49,18 @@ export function renderRepoError(err: RepoError): string {
   }
 }
 
+export function renderParseError(err: ParseError): string {
+  return error(formatParseError(err), isColorEnabled(process.stderr));
+}
+
+export function renderRepoError(err: RepoError): string {
+  return error(formatRepoError(err), isColorEnabled(process.stderr));
+}
+
 export function renderPassage(passage: Passage): string {
-  // v1: single-verse; join all verses for future range support.
+  // text token is identity in v1 (spec I12). No wrap. isColorEnabled call kept so the
+  // infrastructure is exercised and future reference-label wrapping is a one-liner.
+  const _enabled = isColorEnabled(process.stdout);
+  void _enabled;
   return passage.verses.map((v) => v.text).join("\n");
 }
