@@ -36,7 +36,7 @@ type RepoErrorKind = (typeof REPO_ERROR_KINDS)[number];
 // isRepoError — type predicate so CLI layers can narrow AppError → RepoError
 // without unsafe casts (SG1). A compile error fires here if RepoError gains a
 // new kind that is missing from REPO_ERROR_KINDS — R5 exhaustiveness guarantee.
-const _exhaustiveCheck: RepoErrorKind extends RepoError["kind"] ? true : never = true;
+const _exhaustiveCheck: RepoError["kind"] extends RepoErrorKind ? true : never = true;
 void _exhaustiveCheck;
 
 export function isRepoError(err: AppError): err is RepoError {
