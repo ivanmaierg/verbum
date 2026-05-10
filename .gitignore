@@ -10,9 +10,11 @@ build/
 bun.lockb
 .bun/
 
-# Compiled binaries (from `bun build --compile`)
-verbum
-verbum-*
+# Compiled binaries (from `bun build --compile`) — anchored to project root
+# so `verbum-*` does not accidentally match nested directories like
+# openspec/changes/archive/verbum-vod/.
+/verbum
+/verbum-*
 
 # Environment
 .env
