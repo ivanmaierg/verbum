@@ -13,7 +13,7 @@ import { renderParseError, renderRepoError, renderPassage } from "@/cli/render";
 import { createHelloAoBibleRepository } from "@/api/hello-ao-bible-repository";
 import type { BibleRepository } from "@/application/ports/bible-repository";
 import type { Reference } from "@/domain/reference";
-import type { RepoError } from "@/domain/errors";
+import { isRepoError } from "@/domain/errors";
 
 // Optional repo injection enables the smoke test to pass a fixture-backed stub
 // without spawning a process or hitting the network — same pattern as run().
@@ -39,11 +39,16 @@ export async function runVod(
 
   const passageResult = await getPassage(repo, ref);
   if (!passageResult.ok) {
-    // AppError = ParseError | RepoError; pool already passed makeBookId, so
-    // the only ParseError that getPassage can surface is verse_not_found via
-    // RepoError union — treat the remaining branch as RepoError.
-    const err = passageResult.error as RepoError;
-    process.stderr.write(renderRepoError(err) + "\n");
+    // AppError = ParseError | RepoError. Pool entries passed makeBookId so the
+    // expected failures from getPassage are RepoErrors. Narrow via the type
+    // predicate — no unsafe cast (SG1). A stale pool entry could in theory
+    // produce a ParseError; render it correctly either way.
+    const err = passageResult.error;
+    if (isRepoError(err)) {
+      process.stderr.write(renderRepoError(err) + "\n");
+    } else {
+      process.stderr.write(renderParseError(err) + "\n");
+    }
     return 1;
   }
 

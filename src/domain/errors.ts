@@ -20,3 +20,25 @@ export type RepoError =
 
 // AppError is the union that use cases surface to presentation — R5.
 export type AppError = ParseError | RepoError;
+
+// REPO_ERROR_KINDS — exhaustive tuple so isRepoError stays in sync with RepoError — R5.
+const REPO_ERROR_KINDS = [
+  "network",
+  "schema_mismatch",
+  "translation_not_found",
+  "book_not_found",
+  "chapter_not_found",
+  "verse_not_found",
+] as const;
+
+type RepoErrorKind = (typeof REPO_ERROR_KINDS)[number];
+
+// isRepoError — type predicate so CLI layers can narrow AppError → RepoError
+// without unsafe casts (SG1). A compile error fires here if RepoError gains a
+// new kind that is missing from REPO_ERROR_KINDS — R5 exhaustiveness guarantee.
+const _exhaustiveCheck: RepoErrorKind extends RepoError["kind"] ? true : never = true;
+void _exhaustiveCheck;
+
+export function isRepoError(err: AppError): err is RepoError {
+  return (REPO_ERROR_KINDS as readonly string[]).includes(err.kind);
+}

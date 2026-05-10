@@ -7,7 +7,7 @@ import { parseReference } from "@/domain/reference";
 import { getPassage } from "@/application/get-passage";
 import { createHelloAoBibleRepository } from "@/api/hello-ao-bible-repository";
 import { renderParseError, renderRepoError, renderPassage } from "@/cli/render";
-import type { RepoError } from "@/domain/errors";
+import { isRepoError } from "@/domain/errors";
 import { runVod } from "@/cli/vod";
 
 // run — exit-code contract:
@@ -39,10 +39,14 @@ export async function run(argv: string[]): Promise<number> {
   const passageResult = await getPassage(repo, refResult.value);
 
   if (!passageResult.ok) {
-    // AppError = ParseError | RepoError, but ParseError was already handled above.
-    // The remaining error is always a RepoError at this point.
-    const err = passageResult.error as RepoError;
-    process.stderr.write(renderRepoError(err) + "\n");
+    // AppError = ParseError | RepoError. ParseError was already handled above
+    // via parseReference. Narrow via the type predicate — no unsafe cast (SG1).
+    const err = passageResult.error;
+    if (isRepoError(err)) {
+      process.stderr.write(renderRepoError(err) + "\n");
+    } else {
+      process.stderr.write(renderParseError(err) + "\n");
+    }
     return 1;
   }
 
