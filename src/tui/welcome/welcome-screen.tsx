@@ -7,12 +7,13 @@
 //   <text> — multi-line text node (TextProps)
 //   <span> — inline run inside <text>, accepts its own attributes (SpanProps)
 //
-// Color system: monochrome minimal (see docs/ui-sketches.md, "Color philosophy").
-// Dim is the only "color"; verse text always renders at default fg so the words
+// Color system: monochrome with one accent (see docs/ui-sketches.md, "Color philosophy").
+// Accent blue signals the wordmark; verse text always renders at default fg so the words
 // remain the only fully-lit thing on screen.
 
 import { TextAttributes } from "@opentui/core";
-import { BANNER } from "@/cli/banner";
+import { BANNER_DIM_PART, BANNER_ACCENT_PART, BANNER_WIDTH } from "@/cli/banner";
+import { ACCENT_HEX } from "@/presentation/colors";
 import {
   GENESIS_1_1_TEXT,
   JOHN_3_16_TEXT,
@@ -26,7 +27,6 @@ export type WelcomeScreenProps = {
 };
 
 const DIM = TextAttributes.DIM;
-const BANNER_WIDTH = Math.max(...BANNER.split("\n").map((l) => l.length));
 
 // Book-frame chrome rows. All `muted` — they frame the words but never compete with them.
 const TOP_EDGE = " ╱‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾╲╱‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾╲";
@@ -63,7 +63,10 @@ export function WelcomeScreen({
 
   return (
     <box flexDirection="column">
-      <text>{BANNER.trimEnd()}</text>
+      <text>
+        <span attributes={DIM}>{BANNER_DIM_PART.trimEnd()}</span>
+        <span fg={ACCENT_HEX}>{BANNER_ACCENT_PART.trimEnd()}</span>
+      </text>
       <text attributes={DIM}>{WELCOME_VERSION.padStart(BANNER_WIDTH)}</text>
 
       <text>{" "}</text>
