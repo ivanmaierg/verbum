@@ -12,7 +12,7 @@
 // remain the only fully-lit thing on screen.
 
 import { TextAttributes } from "@opentui/core";
-import { BANNER_DIM_PART, BANNER_ACCENT_PART, BANNER_WIDTH } from "@/cli/banner";
+import { BANNER_DIM_LINES, BANNER_ACCENT_LINES, BANNER_WIDTH } from "@/cli/banner";
 import { ACCENT_HEX } from "@/presentation/colors";
 import {
   GENESIS_1_1_TEXT,
@@ -63,10 +63,12 @@ export function WelcomeScreen({
 
   return (
     <box flexDirection="column">
-      <text>
-        <span attributes={DIM}>{BANNER_DIM_PART.trimEnd()}</span>
-        <span fg={ACCENT_HEX}>{BANNER_ACCENT_PART.trimEnd()}</span>
-      </text>
+      {BANNER_DIM_LINES.map((dimLine, i) => (
+        <text key={i}>
+          <span attributes={DIM}>{dimLine}</span>
+          <span fg={ACCENT_HEX}>{BANNER_ACCENT_LINES[i] ?? ""}</span>
+        </text>
+      ))}
       <text attributes={DIM}>{WELCOME_VERSION.padStart(BANNER_WIDTH)}</text>
 
       <text>{" "}</text>
