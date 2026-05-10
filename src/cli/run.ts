@@ -8,6 +8,7 @@ import { getPassage } from "@/application/get-passage";
 import { createHelloAoBibleRepository } from "@/api/hello-ao-bible-repository";
 import { renderParseError, renderRepoError, renderPassage } from "@/cli/render";
 import type { RepoError } from "@/domain/errors";
+import { runVod } from "@/cli/vod";
 
 // run — exit-code contract:
 //   0 → happy path, verse text on stdout
@@ -19,6 +20,12 @@ export async function run(argv: string[]): Promise<number> {
     allowPositionals: true,
     strict: false,
   });
+
+  // Subcommand dispatch (I6, I7): check before parseReference. Any positional
+  // that is NOT a recognised subcommand falls through unchanged.
+  if (positionals[0] === "vod") {
+    return await runVod(new Date());
+  }
 
   const input = positionals.join(" ").trim();
 
