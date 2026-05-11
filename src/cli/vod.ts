@@ -10,6 +10,7 @@ import { VERSE_POOL } from "@/cli/verse-pool-data";
 import { makeBookId } from "@/domain/book-id";
 import { getPassage } from "@/application/get-passage";
 import { renderParseError, renderRepoError, renderPassage } from "@/cli/render";
+import { withLoading } from "@/cli/loading";
 import { createHelloAoBibleRepository } from "@/api/hello-ao-bible-repository";
 import type { BibleRepository } from "@/application/ports/bible-repository";
 import type { Reference } from "@/domain/reference";
@@ -37,7 +38,7 @@ export async function runVod(
     verses: { start: entry.verse, end: entry.verse },
   };
 
-  const passageResult = await getPassage(repo, ref);
+  const passageResult = await withLoading(process.stderr, () => getPassage(repo, ref));
   if (!passageResult.ok) {
     // AppError = ParseError | RepoError. Pool entries passed makeBookId so the
     // expected failures from getPassage are RepoErrors. Narrow via the type
