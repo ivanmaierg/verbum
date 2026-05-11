@@ -1,5 +1,13 @@
 # verbum
 
+> Read the Bible from your terminal. A TUI + CLI scripture reader, in one binary.
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Bun](https://img.shields.io/badge/Bun-1.2+-black?logo=bun)](https://bun.sh)
+[![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Architecture](https://img.shields.io/badge/architecture-hexagonal-7C3AED)](docs/architecture.md)
+[![Status](https://img.shields.io/badge/status-design%20phase-orange)](#)
+
 A TUI + CLI Bible reader. Built on **Hexagonal (Ports & Adapters)** with a **Screaming** top-level structure, so the API, the TUI, or the runtime can be swapped without touching the domain.
 
 > **Status:** design phase. The architecture, roadmap, user flows, and decision records are complete. Source code lands with v1.
