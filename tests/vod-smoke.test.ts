@@ -4,6 +4,7 @@
 
 import { describe, it, expect } from "bun:test";
 import { runVod } from "@/cli/vod";
+import { withLoading } from "@/cli/loading";
 import { VERSE_POOL } from "@/cli/verse-pool-data";
 import { pickVerseForDate } from "@/application/verse-pool";
 import type { BibleRepository } from "@/application/ports/bible-repository";
@@ -120,5 +121,43 @@ describe("smoke — verbum vod happy path", () => {
     const b = await capture();
     expect(a).toBe(b);
     expect(a.length).toBeGreaterThan(0);
+  });
+});
+
+// ─── Smoke: loading suppression under NO_COLOR=1 ─────────────────────────────
+
+describe("smoke — withLoading writes zero bytes to non-TTY stream (NO_COLOR=1)", () => {
+  it("no Braille frames and no \\r written to stderr when NO_COLOR=1", async () => {
+    const savedNoColor = process.env.NO_COLOR;
+    const stderrWrites: string[] = [];
+
+    // Fake non-TTY stderr for withLoading — safe because isTTY:false is the pipe path.
+    const fakeStderr = {
+      isTTY: false as const,
+      write(chunk: string | Uint8Array) {
+        stderrWrites.push(typeof chunk === "string" ? chunk : Buffer.from(chunk).toString());
+        return true;
+      },
+    } as unknown as NodeJS.WriteStream;
+
+    try {
+      process.env.NO_COLOR = "1";
+      const fixed = new Date("2026-01-15");
+      await withLoading(fakeStderr, () => runVod(fixed, stubRepo));
+    } finally {
+      if (savedNoColor === undefined) {
+        delete process.env.NO_COLOR;
+      } else {
+        process.env.NO_COLOR = savedNoColor;
+      }
+    }
+
+    const capturedStderr = stderrWrites.join("");
+    // No Braille spinner characters should appear in stderr.
+    for (const frame of ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]) {
+      expect(capturedStderr).not.toContain(frame);
+    }
+    // No carriage returns from spinner cleanup should appear either.
+    expect(capturedStderr).not.toContain("\r");
   });
 });
