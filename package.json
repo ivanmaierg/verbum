@@ -1,6 +1,34 @@
 {
   "name": "verbum",
   "version": "0.1.0",
+  "description": "Read the Bible from your terminal — TUI + CLI in one binary, built with Bun, TypeScript, OpenTUI, and Hexagonal Architecture.",
+  "keywords": [
+    "bible",
+    "bible-reader",
+    "bible-cli",
+    "bible-tui",
+    "scripture",
+    "verse",
+    "tui",
+    "cli",
+    "terminal",
+    "terminal-ui",
+    "bun",
+    "typescript",
+    "react",
+    "opentui",
+    "hexagonal-architecture",
+    "clean-architecture"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ivanmaierg/verbum.git"
+  },
+  "homepage": "https://github.com/ivanmaierg/verbum#readme",
+  "bugs": {
+    "url": "https://github.com/ivanmaierg/verbum/issues"
+  },
   "type": "module",
   "scripts": {
     "test": "bun test",
