@@ -7,6 +7,7 @@ import { parseReference } from "@/domain/reference";
 import { getPassage } from "@/application/get-passage";
 import { createHelloAoBibleRepository } from "@/api/hello-ao-bible-repository";
 import { renderParseError, renderRepoError, renderPassage } from "@/cli/render";
+import { withLoading } from "@/cli/loading";
 import { isRepoError } from "@/domain/errors";
 import { runVod } from "@/cli/vod";
 
@@ -36,7 +37,7 @@ export async function run(argv: string[]): Promise<number> {
   }
 
   const repo = createHelloAoBibleRepository();
-  const passageResult = await getPassage(repo, refResult.value);
+  const passageResult = await withLoading(process.stderr, () => getPassage(repo, refResult.value));
 
   if (!passageResult.ok) {
     // AppError = ParseError | RepoError. ParseError was already handled above
