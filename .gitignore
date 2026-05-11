@@ -32,3 +32,6 @@ bun.lockb
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# Agent Teams Lite — local skill registry and ephemeral state
+.atl/
