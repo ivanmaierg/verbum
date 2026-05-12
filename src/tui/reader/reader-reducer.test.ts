@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { readerReducer, initialReaderState } from "@/tui/reader/reader-reducer";
+import { readerReducer, initialReaderState, VERSES_PER_PAGE } from "@/tui/reader/reader-reducer";
 import type { ReaderState, ReaderAction } from "@/tui/reader/reader-reducer";
 import type { Passage } from "@/domain/passage";
 import type { RepoError } from "@/domain/errors";
@@ -18,6 +18,24 @@ const mockPassage: Passage = {
 
 const networkError: RepoError = { kind: "network", message: "unreachable" };
 
+function makePassage(count: number): Passage {
+  return {
+    reference: johnRef,
+    verses: Array.from({ length: count }, (_, i) => ({
+      number: i + 1,
+      text: `Verse ${i + 1}`,
+    })),
+  };
+}
+
+function makeLoaded(
+  passage: Passage,
+  cursorIndex: number,
+  pageStartIndex: number,
+): ReaderState {
+  return { kind: "loaded", passage, ref: johnRef, cursorIndex, pageStartIndex };
+}
+
 function dispatch(state: ReaderState, action: ReaderAction): ReaderState {
   return readerReducer(state, action);
 }
@@ -30,6 +48,12 @@ describe("readerReducer", () => {
         query: "",
         parseError: null,
       });
+    });
+  });
+
+  describe("VERSES_PER_PAGE", () => {
+    it("equals 8", () => {
+      expect(VERSES_PER_PAGE).toBe(8);
     });
   });
 
@@ -82,14 +106,20 @@ describe("readerReducer", () => {
   });
 
   describe("PassageFetched", () => {
-    it("transitions loading → loaded", () => {
+    it("transitions loading → loaded with cursorIndex: 0, pageStartIndex: 0", () => {
       const state: ReaderState = { kind: "loading", ref: johnRef };
       const next = dispatch(state, { type: "PassageFetched", passage: mockPassage });
-      expect(next).toEqual({ kind: "loaded", passage: mockPassage, ref: johnRef });
+      expect(next).toEqual({
+        kind: "loaded",
+        passage: mockPassage,
+        ref: johnRef,
+        cursorIndex: 0,
+        pageStartIndex: 0,
+      });
     });
 
     it("is a no-op when not loading", () => {
-      const state: ReaderState = { kind: "loaded", passage: mockPassage, ref: johnRef };
+      const state = makeLoaded(mockPassage, 0, 0);
       const next = dispatch(state, { type: "PassageFetched", passage: mockPassage });
       expect(next).toBe(state);
     });
@@ -103,7 +133,7 @@ describe("readerReducer", () => {
     });
 
     it("is a no-op when not loading", () => {
-      const state: ReaderState = { kind: "loaded", passage: mockPassage, ref: johnRef };
+      const state = makeLoaded(mockPassage, 0, 0);
       const next = dispatch(state, { type: "FetchFailed", ref: johnRef, reason: networkError });
       expect(next).toBe(state);
     });
@@ -111,7 +141,7 @@ describe("readerReducer", () => {
 
   describe("ChapterAdvanced", () => {
     it("transitions loaded → loading with chapter + 1", () => {
-      const state: ReaderState = { kind: "loaded", passage: mockPassage, ref: johnRef };
+      const state = makeLoaded(mockPassage, 0, 0);
       const next = dispatch(state, { type: "ChapterAdvanced" });
       expect(next.kind).toBe("loading");
       if (next.kind !== "loading") return;
@@ -134,29 +164,31 @@ describe("readerReducer", () => {
       const next = dispatch(state, { type: "ChapterAdvanced" });
       expect(next).toBe(state);
     });
+
+    it("loaded → loading carries no cursorIndex or pageStartIndex", () => {
+      const state = makeLoaded(mockPassage, 2, 0);
+      const next = dispatch(state, { type: "ChapterAdvanced" });
+      expect(next.kind).toBe("loading");
+      expect((next as any).cursorIndex).toBeUndefined();
+      expect((next as any).pageStartIndex).toBeUndefined();
+    });
   });
 
   describe("ChapterRetreated", () => {
     it("transitions loaded → loading with chapter - 1 when chapter > 1", () => {
-      const state: ReaderState = {
-        kind: "loaded",
-        passage: mockPassage,
-        ref: { ...johnRef, chapter: 5 },
-      };
-      const next = dispatch(state, { type: "ChapterRetreated" });
+      const state = makeLoaded(mockPassage, 0, 0);
+      const adjustedState = { ...state, ref: { ...johnRef, chapter: 5 } } as ReaderState;
+      const next = dispatch(adjustedState, { type: "ChapterRetreated" });
       expect(next.kind).toBe("loading");
       if (next.kind !== "loading") return;
       expect(next.ref.chapter).toBe(4);
     });
 
     it("is a no-op when chapter === 1 (floor)", () => {
-      const state: ReaderState = {
-        kind: "loaded",
-        passage: mockPassage,
-        ref: { ...johnRef, chapter: 1 },
-      };
-      const next = dispatch(state, { type: "ChapterRetreated" });
-      expect(next).toBe(state);
+      const state = makeLoaded(mockPassage, 0, 0);
+      const adjustedState = { ...state, ref: { ...johnRef, chapter: 1 } } as ReaderState;
+      const next = dispatch(adjustedState, { type: "ChapterRetreated" });
+      expect(next).toBe(adjustedState);
     });
 
     it("is a no-op from awaiting", () => {
@@ -173,7 +205,7 @@ describe("readerReducer", () => {
 
   describe("PaletteReopened", () => {
     it("transitions loaded → awaiting with cleared query", () => {
-      const state: ReaderState = { kind: "loaded", passage: mockPassage, ref: johnRef };
+      const state = makeLoaded(mockPassage, 0, 0);
       const next = dispatch(state, { type: "PaletteReopened" });
       expect(next).toEqual({ kind: "awaiting", query: "", parseError: null });
     });
@@ -192,6 +224,107 @@ describe("readerReducer", () => {
     it("is a no-op from loading", () => {
       const state: ReaderState = { kind: "loading", ref: johnRef };
       const next = dispatch(state, { type: "PaletteReopened" });
+      expect(next).toBe(state);
+    });
+  });
+
+  describe("new actions are no-ops outside loaded", () => {
+    const newActions: ReaderAction[] = [
+      { type: "CursorMovedUp" },
+      { type: "CursorMovedDown" },
+      { type: "PageAdvanced" },
+      { type: "PageRetreated" },
+    ];
+
+    const nonLoadedStates: ReaderState[] = [
+      { kind: "awaiting", query: "", parseError: null },
+      { kind: "loading", ref: johnRef },
+      { kind: "network-error", ref: johnRef, reason: networkError },
+    ];
+
+    for (const action of newActions) {
+      for (const state of nonLoadedStates) {
+        it(`${action.type} is a no-op when state.kind === "${state.kind}"`, () => {
+          expect(dispatch(state, action)).toBe(state);
+        });
+      }
+    }
+  });
+
+  describe("CursorMovedDown", () => {
+    it("increments cursorIndex within page", () => {
+      const p = makePassage(10);
+      const state = makeLoaded(p, 0, 0);
+      const next = dispatch(state, { type: "CursorMovedDown" });
+      expect(next).toEqual(makeLoaded(p, 1, 0));
+    });
+
+    it("advances page and resets cursor at page boundary", () => {
+      const p = makePassage(16);
+      const state = makeLoaded(p, 7, 0);
+      const next = dispatch(state, { type: "CursorMovedDown" });
+      expect(next).toEqual(makeLoaded(p, 8, 8));
+    });
+
+    it("clamps at last verse of last page", () => {
+      const p = makePassage(10);
+      const state = makeLoaded(p, 9, 8);
+      const next = dispatch(state, { type: "CursorMovedDown" });
+      expect(next).toBe(state);
+    });
+  });
+
+  describe("CursorMovedUp", () => {
+    it("decrements cursorIndex within page", () => {
+      const p = makePassage(10);
+      const state = makeLoaded(p, 3, 0);
+      const next = dispatch(state, { type: "CursorMovedUp" });
+      expect(next).toEqual(makeLoaded(p, 2, 0));
+    });
+
+    it("retreats page and sets cursor to last verse of retreated page", () => {
+      const p = makePassage(16);
+      const state = makeLoaded(p, 8, 8);
+      const next = dispatch(state, { type: "CursorMovedUp" });
+      expect(next).toEqual(makeLoaded(p, 7, 0));
+    });
+
+    it("clamps at first verse of first page", () => {
+      const p = makePassage(10);
+      const state = makeLoaded(p, 0, 0);
+      const next = dispatch(state, { type: "CursorMovedUp" });
+      expect(next).toBe(state);
+    });
+  });
+
+  describe("PageAdvanced", () => {
+    it("advances to next page and sets cursorIndex to pageStartIndex", () => {
+      const p = makePassage(16);
+      const state = makeLoaded(p, 3, 0);
+      const next = dispatch(state, { type: "PageAdvanced" });
+      expect(next).toEqual(makeLoaded(p, 8, 8));
+    });
+
+    it("clamps at last page", () => {
+      const p = makePassage(10);
+      const state = makeLoaded(p, 9, 8);
+      const next = dispatch(state, { type: "PageAdvanced" });
+      expect(next).toBe(state);
+    });
+  });
+
+  describe("PageRetreated", () => {
+    it("retreats to previous page and sets cursorIndex to new pageStartIndex", () => {
+      const p = makePassage(16);
+      const state = makeLoaded(p, 10, 8);
+      const next = dispatch(state, { type: "PageRetreated" });
+      expect(next).toEqual(makeLoaded(p, 0, 0));
+    });
+
+    it("clamps at first page", () => {
+      const p = makePassage(10);
+      const state = makeLoaded(p, 2, 0);
+      const next = dispatch(state, { type: "PageRetreated" });
       expect(next).toBe(state);
     });
   });
