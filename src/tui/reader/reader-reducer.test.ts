@@ -106,7 +106,7 @@ describe("readerReducer", () => {
   });
 
   describe("PassageFetched", () => {
-    it("transitions loading → loaded with cursorIndex: 0, pageStartIndex: 0", () => {
+    it("defaults cursorIndex to 0 when the ref's target verse is not in the passage", () => {
       const state: ReaderState = { kind: "loading", ref: johnRef };
       const next = dispatch(state, { type: "PassageFetched", passage: mockPassage });
       expect(next).toEqual({
@@ -116,6 +116,28 @@ describe("readerReducer", () => {
         cursorIndex: 0,
         pageStartIndex: 0,
       });
+    });
+
+    it("positions cursor on the verse matching ref.verses.start", () => {
+      // John 3:16 — passage has 36 verses, target verse 16 should land at index 15.
+      const passage = makePassage(36);
+      const ref: Reference = { ...johnRef, verses: { start: 16, end: 16 } };
+      const state: ReaderState = { kind: "loading", ref };
+      const next = dispatch(state, { type: "PassageFetched", passage });
+      if (next.kind !== "loaded") throw new Error("expected loaded state");
+      expect(next.cursorIndex).toBe(15);
+      // Verse 16 (index 15) belongs to page 2 (indices 8-15) when VERSES_PER_PAGE === 8.
+      expect(next.pageStartIndex).toBe(8);
+    });
+
+    it("places page boundary correctly on the third page (verse 17 → index 16, page 3)", () => {
+      const passage = makePassage(36);
+      const ref: Reference = { ...johnRef, verses: { start: 17, end: 17 } };
+      const state: ReaderState = { kind: "loading", ref };
+      const next = dispatch(state, { type: "PassageFetched", passage });
+      if (next.kind !== "loaded") throw new Error("expected loaded state");
+      expect(next.cursorIndex).toBe(16);
+      expect(next.pageStartIndex).toBe(16);
     });
 
     it("is a no-op when not loading", () => {
@@ -140,12 +162,17 @@ describe("readerReducer", () => {
   });
 
   describe("ChapterAdvanced", () => {
-    it("transitions loaded → loading with chapter + 1", () => {
-      const state = makeLoaded(mockPassage, 0, 0);
-      const next = dispatch(state, { type: "ChapterAdvanced" });
+    it("transitions loaded → loading with chapter + 1 and resets ref.verses to {1, 1}", () => {
+      // Why: ref.verses comes from the user's original input (e.g. john 3:16). On chapter
+      // advance the cursor should land at the top of the new chapter, not at verse 16.
+      const stateWithVerse16 = makeLoaded(mockPassage, 0, 0);
+      const refWithVerse16 = { ...johnRef, verses: { start: 16, end: 16 } };
+      const adjusted = { ...stateWithVerse16, ref: refWithVerse16 } as ReaderState;
+      const next = dispatch(adjusted, { type: "ChapterAdvanced" });
       expect(next.kind).toBe("loading");
       if (next.kind !== "loading") return;
       expect(next.ref.chapter).toBe(4);
+      expect(next.ref.verses).toEqual({ start: 1, end: 1 });
     });
 
     it("is a no-op from awaiting", () => {

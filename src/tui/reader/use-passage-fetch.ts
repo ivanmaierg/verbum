@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import type { Dispatch } from "react";
-import { getPassage } from "@/application/get-passage";
+import { getChapter } from "@/application/get-chapter";
 import type { BibleRepository } from "@/application/ports/bible-repository";
 import { isRepoError } from "@/domain/errors";
 import type { ReaderState, ReaderAction } from "@/tui/reader/reader-reducer";
@@ -16,7 +16,7 @@ export function usePassageFetch(
     let cancelled = false;
     const ref = state.ref;
 
-    getPassage(repo, ref).then((result) => {
+    getChapter(repo, ref).then((result) => {
       if (cancelled) return;
       if (result.ok) {
         dispatch({ type: "PassageFetched", passage: result.value });

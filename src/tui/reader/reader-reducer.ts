@@ -36,10 +36,14 @@ const handlers = {
       : { ...s, parseError: result.error };
   },
 
-  PassageFetched: (s: ReaderState, a: Extract<ReaderAction, { type: "PassageFetched" }>): ReaderState =>
-    s.kind === "loading"
-      ? { kind: "loaded", passage: a.passage, ref: s.ref, cursorIndex: 0, pageStartIndex: 0 }
-      : s,
+  PassageFetched: (s: ReaderState, a: Extract<ReaderAction, { type: "PassageFetched" }>): ReaderState => {
+    if (s.kind !== "loading") return s;
+    const targetVerse = s.ref.verses.start;
+    const foundIndex = a.passage.verses.findIndex((v) => v.number === targetVerse);
+    const cursorIndex = foundIndex >= 0 ? foundIndex : 0;
+    const pageStartIndex = Math.floor(cursorIndex / VERSES_PER_PAGE) * VERSES_PER_PAGE;
+    return { kind: "loaded", passage: a.passage, ref: s.ref, cursorIndex, pageStartIndex };
+  },
 
   FetchFailed: (s: ReaderState, a: Extract<ReaderAction, { type: "FetchFailed" }>): ReaderState =>
     s.kind === "loading"
@@ -48,13 +52,13 @@ const handlers = {
 
   ChapterAdvanced: (s: ReaderState, _a: Extract<ReaderAction, { type: "ChapterAdvanced" }>): ReaderState =>
     s.kind === "loaded"
-      ? { kind: "loading", ref: { ...s.ref, chapter: s.ref.chapter + 1 } }
+      ? { kind: "loading", ref: { ...s.ref, chapter: s.ref.chapter + 1, verses: { start: 1, end: 1 } } }
       : s,
 
   ChapterRetreated: (s: ReaderState, _a: Extract<ReaderAction, { type: "ChapterRetreated" }>): ReaderState => {
     if (s.kind !== "loaded") return s;
     if (s.ref.chapter <= 1) return s;
-    return { kind: "loading", ref: { ...s.ref, chapter: s.ref.chapter - 1 } };
+    return { kind: "loading", ref: { ...s.ref, chapter: s.ref.chapter - 1, verses: { start: 1, end: 1 } } };
   },
 
   PaletteReopened: (s: ReaderState, _a: Extract<ReaderAction, { type: "PaletteReopened" }>): ReaderState =>

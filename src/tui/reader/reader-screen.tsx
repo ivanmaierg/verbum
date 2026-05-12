@@ -79,12 +79,14 @@ function Body({ state, dispatch, frame }: BodyProps) {
       <box flexDirection="column">
         <text attributes={DIM}>{"  Type a reference, press Enter"}</text>
         <text>{" "}</text>
-        <input
-          focused
-          value={state.query}
-          onChange={(v) => dispatch({ type: "QueryTyped", query: v })}
-          onSubmit={() => dispatch({ type: "QuerySubmitted" })}
-        />
+        <box width={50} marginLeft={2}>
+          <input
+            focused
+            value={state.query}
+            onChange={(v) => dispatch({ type: "QueryTyped", query: v })}
+            onSubmit={() => dispatch({ type: "QuerySubmitted" })}
+          />
+        </box>
         {state.parseError !== null ? (
           <text>{`  ⚠ couldn't parse "${state.query}"`}</text>
         ) : null}
@@ -119,7 +121,7 @@ function Body({ state, dispatch, frame }: BodyProps) {
         const focused = idx === cursorIndex;
         return (
           <text key={v.number}>
-            <span fg={focused ? ACCENT_HEX : undefined} attributes={DIM}>
+            <span fg={focused ? ACCENT_HEX : undefined} attributes={focused ? undefined : DIM}>
               {focused ? "▶" : " "}
             </span>
             <span attributes={DIM}>{`${String(v.number).padStart(3)}  `}</span>
