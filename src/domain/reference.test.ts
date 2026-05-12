@@ -6,7 +6,7 @@ describe("parseReference", () => {
     const result = parseReference("john 3:16");
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.value.book).toBe("JHN");
+    expect(result.value.book as string).toBe("JHN");
     expect(result.value.chapter).toBe(3);
     expect(result.value.verses).toEqual({ start: 16, end: 16 });
   });
@@ -15,7 +15,7 @@ describe("parseReference", () => {
     const result = parseReference("JOHN 3:16");
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.value.book).toBe("JHN");
+    expect(result.value.book as string).toBe("JHN");
     expect(result.value.chapter).toBe(3);
     expect(result.value.verses).toEqual({ start: 16, end: 16 });
   });
@@ -24,7 +24,7 @@ describe("parseReference", () => {
     const result = parseReference("Jn 3:16");
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.value.book).toBe("JHN");
+    expect(result.value.book as string).toBe("JHN");
   });
 
   it("returns unknown_book for 'xyzzy 99:99' — SCN-3", () => {
