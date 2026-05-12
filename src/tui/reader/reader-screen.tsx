@@ -1,14 +1,12 @@
 import { useState, useEffect } from "react";
 import { TextAttributes } from "@opentui/core";
 import { SPINNER_FRAMES } from "@/cli/loading";
-import { ACCENT_HEX } from "@/presentation/colors";
 import { usePassageFetch } from "@/tui/reader/use-passage-fetch";
 import type { BibleRepository } from "@/application/ports/bible-repository";
 import type { ReaderState, ReaderAction } from "@/tui/reader/reader-reducer";
 import type { Dispatch } from "react";
 
 const DIM = TextAttributes.DIM;
-const BOLD = TextAttributes.BOLD;
 
 type ReaderScreenProps = {
   state: ReaderState;
@@ -22,15 +20,62 @@ export function ReaderScreen({ state, dispatch, repo }: ReaderScreenProps) {
   const [frame, setFrame] = useState(0);
   useEffect(() => {
     if (state.kind !== "loading") return;
-    const id = setInterval(() => setFrame((f) => (f + 1) % SPINNER_FRAMES.length), 80);
+    const id = setInterval(
+      () => setFrame((f) => (f + 1) % SPINNER_FRAMES.length),
+      80,
+    );
     return () => clearInterval(id);
   }, [state.kind]);
 
+  return (
+    <box
+      border
+      borderStyle="single"
+      title={titleFor(state)}
+      bottomTitle={bottomTitleFor(state)}
+      flexGrow={1}
+    >
+      <Body state={state} dispatch={dispatch} frame={frame} />
+    </box>
+  );
+}
+
+function titleFor(state: ReaderState): string {
+  switch (state.kind) {
+    case "awaiting":
+      return " verbum ";
+    case "loading":
+    case "loaded":
+    case "network-error":
+      return ` ${state.ref.book} ${state.ref.chapter} — Berean Standard Bible `;
+  }
+}
+
+function bottomTitleFor(state: ReaderState): string {
+  switch (state.kind) {
+    case "awaiting":
+      return " Enter open  •  q quit ";
+    case "loading":
+      return " loading…  •  q quit ";
+    case "loaded":
+      return " ] next ch  •  [ prev ch  •  / palette  •  q quit ";
+    case "network-error":
+      return " / palette  •  q quit ";
+  }
+}
+
+type BodyProps = {
+  state: ReaderState;
+  dispatch: Dispatch<ReaderAction>;
+  frame: number;
+};
+
+function Body({ state, dispatch, frame }: BodyProps) {
   if (state.kind === "awaiting") {
     return (
       <box flexDirection="column">
-        <text attributes={DIM}>{"╭───────────────────────────────────────╮"}</text>
-        <text attributes={DIM}>{"│  Type a reference, press Enter        │"}</text>
+        <text attributes={DIM}>{"  Type a reference, press Enter"}</text>
+        <text>{" "}</text>
         <input
           focused
           value={state.query}
@@ -40,59 +85,35 @@ export function ReaderScreen({ state, dispatch, repo }: ReaderScreenProps) {
         {state.parseError !== null ? (
           <text>{`  ⚠ couldn't parse "${state.query}"`}</text>
         ) : null}
-        <text attributes={DIM}>{"╰───────────────────────────────────────╯"}</text>
-        <text>{" "}</text>
-        <text attributes={DIM}>{"  Enter open  •  / palette  •  q quit"}</text>
       </box>
     );
   }
 
   if (state.kind === "loading") {
     return (
-      <box flexDirection="column">
-        <text attributes={DIM}>{`  ${SPINNER_FRAMES[frame]} loading…`}</text>
-      </box>
+      <text attributes={DIM}>{`  ${SPINNER_FRAMES[frame]} loading…`}</text>
     );
   }
 
   if (state.kind === "network-error") {
     const isLastChapter = state.reason.kind === "chapter_not_found";
     return (
-      <box flexDirection="column">
-        <text>
-          <span attributes={DIM}>{"┌─ "}</span>
-          <span fg={ACCENT_HEX} attributes={BOLD}>{`${state.ref.book} ${state.ref.chapter}`}</span>
-          <span attributes={DIM}>{" ─────────────────────────────────────┐"}</span>
-        </text>
-        <text>{" "}</text>
-        <text>{isLastChapter ? "  ⚠ last chapter reached" : "  ⚠ could not load — network unreachable"}</text>
-        <text>{" "}</text>
-        <text attributes={DIM}>{"└──────────────────────────────────────────────────────────────────┘"}</text>
-        <text attributes={DIM}>{"  / palette  •  q quit"}</text>
-      </box>
+      <text>
+        {isLastChapter
+          ? "  ⚠ last chapter reached"
+          : "  ⚠ could not load — network unreachable"}
+      </text>
     );
   }
 
-  const { passage, ref } = state;
   return (
     <box flexDirection="column">
-      <text>
-        <span attributes={DIM}>{"┌─ "}</span>
-        <span fg={ACCENT_HEX} attributes={BOLD}>{`${ref.book} ${ref.chapter}`}</span>
-        <span attributes={DIM}>{" ─ Berean Standard Bible ─────────────────────────────┐"}</span>
-      </text>
-      <text attributes={DIM}>{"│"}</text>
-      {passage.verses.map((v) => (
+      {state.passage.verses.map((v) => (
         <text key={v.number}>
-          <span attributes={DIM}>{`│  ${String(v.number).padStart(3)}  `}</span>
+          <span attributes={DIM}>{`${String(v.number).padStart(3)}  `}</span>
           {v.text}
-          <span attributes={DIM}>{"  │"}</span>
         </text>
       ))}
-      <text attributes={DIM}>{"│"}</text>
-      <text attributes={DIM}>{"├──────────────────────────────────────────────────────────────────┤"}</text>
-      <text attributes={DIM}>{"│  ] next ch  •  [ prev ch  •  / palette  •  q quit               │"}</text>
-      <text attributes={DIM}>{"└──────────────────────────────────────────────────────────────────┘"}</text>
     </box>
   );
 }

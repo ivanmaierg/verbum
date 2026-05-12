@@ -1,16 +1,3 @@
-// src/tui/welcome/welcome-screen.tsx — pure props-driven view for the welcome screen.
-// No useState for business state. No useEffect. No imports from domain/application/api.
-// The driver (tui-driver.tsx) owns useReducer; this component is a pure view (REQ-2 / NFR-5).
-//
-// OpenTUI primitives resolved from node_modules/@opentui/react:
-//   <box>  — container with Yoga flexbox layout (BoxProps)
-//   <text> — multi-line text node (TextProps)
-//   <span> — inline run inside <text>, accepts its own attributes (SpanProps)
-//
-// Color system: monochrome with one accent (see docs/ui-sketches.md, "Color philosophy").
-// Accent blue signals the wordmark; verse text always renders at default fg so the words
-// remain the only fully-lit thing on screen.
-
 import { TextAttributes } from "@opentui/core";
 import { BANNER_DIM_LINES, BANNER_ACCENT_LINES, BANNER_WIDTH } from "@/cli/banner";
 import { ACCENT_HEX } from "@/presentation/colors";
@@ -28,7 +15,6 @@ export type WelcomeScreenProps = {
 
 const DIM = TextAttributes.DIM;
 
-// Book-frame chrome rows. All `muted` — they frame the words but never compete with them.
 const TOP_EDGE = " ╱‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾╲╱‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾╲";
 const REF_ROW = "│  ✦ Genesis 1:1                    │  ✦ John 3:16                      │";
 const UNDERLINE = "│   ‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾ │ ‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾   │";
@@ -39,9 +25,6 @@ const RIBBON_1 = "                                                              
 const RIBBON_2 = "                                                                /";
 const RIBBON_3 = "                                                                ▼";
 
-// One row of verse text inside the open book. Frame characters and inter-page
-// gutters render as <span attributes={DIM}>; the verse text itself stays at
-// default fg — the only non-dim content on the welcome screen.
 function VerseRow({ left, right }: { left: string; right: string }) {
   return (
     <text>
@@ -88,7 +71,7 @@ export function WelcomeScreen({
       <text attributes={DIM}>{RIBBON_3}</text>
 
       <text>{" "}</text>
-      <text attributes={DIM}>{"  ? help • q quit"}</text>
+      <text attributes={DIM}>{"  any key to start  •  / palette  •  ] next ch  •  [ prev ch  •  q quit"}</text>
     </box>
   );
 }
