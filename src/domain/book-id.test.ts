@@ -6,7 +6,7 @@ describe("makeBookId", () => {
     const result = makeBookId("JHN");
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.value).toBe("JHN");
+    expect(result.value as string).toBe("JHN");
   });
 
   it("accepts GEN — first book in the canonical set", () => {

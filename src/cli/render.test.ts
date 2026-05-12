@@ -5,11 +5,23 @@ import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import { renderPassage, renderParseError, renderRepoError } from "./render";
 import type { ParseError, RepoError } from "@/domain/errors";
 import type { Passage } from "@/domain/passage";
+import type { Reference } from "@/domain/reference";
+import { makeBookId } from "@/domain/book-id";
 
 // --- Fixtures ---
 
+const jhnResult = makeBookId("JHN");
+if (!jhnResult.ok) throw new Error("test fixture: JHN must be a valid BookId");
+
+const johnRef: Reference = {
+  book: jhnResult.value,
+  chapter: 3,
+  verses: { start: 16, end: 16 },
+};
+
 const passage: Passage = {
-  verses: [{ text: "For God so loved the world." }],
+  reference: johnRef,
+  verses: [{ number: 16, text: "For God so loved the world." }],
 };
 
 const PASSAGE_PLAIN = "For God so loved the world.";
