@@ -1,7 +1,11 @@
 # 0009 — Language-portable architecture (Go-port readiness)
 
-- Status: accepted
+- Status: superseded by 0010
 - Date: 2026-05-09
+
+## Superseded by
+
+[ADR 0010](0010-typescript-native-architecture.md) — Go-port commitment dropped 2026-05-11. The Bubble Tea parity rules (Rules 7–10 in the original numbering of this ADR) are retired. See ADR 0010 for the full rule disposition.
 
 ## Context
 

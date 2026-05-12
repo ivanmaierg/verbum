@@ -1,16 +1,17 @@
 # House Rules
 
-This codebase follows a **portability-first dialect of TypeScript** designed so that a future port to Go (with Bubble Tea for the TUI) is mechanical translation, not redesign. Every rule below is enforceable in code review — cite by number.
+> **ADR 0010 (2026-05-11):** This file has been updated to reflect the TypeScript-native architecture. The Go-port portability mandate (ADR 0009) is superseded. Rules 9 and 10 are retired; Rules 7 and 8 are loosened. See [ADR 0010](decisions/0010-typescript-native-architecture.md) for the full decision and rationale.
+
+This codebase follows a **TypeScript-native architecture** built on hexagonal foundations. Every rule below is enforceable in code review — cite by number.
 
 The principles behind the rules:
 
 - **Hexagonal first.** Dependency rule (arrows point inward) is non-negotiable. ([ADR 0002](decisions/0002-hexagonal-architecture.md))
 - **Pure domain.** No IO, no framework code, no async in `src/domain/`.
-- **Explicit errors.** Throwing is implicit control flow that doesn't port to Go.
+- **Explicit errors.** Throwing is implicit control flow. Return `Result<T,E>` instead.
 - **Symmetric input.** Mouse and keyboard dispatch the same use cases.
-- **The TUI is the riskiest port.** Rules 7–10 specifically protect the TUI's state shape so a Bubble Tea port is mechanical.
 
-See [ADR 0009](decisions/0009-language-portable-architecture.md) for the full rationale and revisit triggers.
+See [ADR 0010](decisions/0010-typescript-native-architecture.md) for the governing architectural decision.
 
 ---
 
@@ -34,8 +35,6 @@ function parseReference(s: string): Result<Reference, ParseError> {
 }
 ```
 
-**Go port:** `func parseReference(s string) (Reference, error)` — direct.
-
 ---
 
 ## Rule 2 — No `class` keyword outside React components
@@ -56,13 +55,11 @@ export function parseReference(
 }
 ```
 
-**Go port:** package-level functions. Methods on structs only when the struct genuinely owns state.
-
 ---
 
 ## Rule 3 — Ports are interfaces with primitive/struct args, no callbacks
 
-Ports must look like Go interfaces. No event emitters, no observables, no streaming via callbacks.
+No event emitters, no observables, no streaming via callbacks.
 
 ```ts
 // ❌ AVOID
@@ -86,7 +83,7 @@ interface BibleRepository {
 }
 ```
 
-Callbacks become Go channels — different paradigm. If streaming becomes necessary later, it warrants its own architectural decision.
+If streaming becomes necessary later, it warrants its own architectural decision.
 
 ---
 
@@ -112,11 +109,9 @@ import type { Verse } from "@/domain/verse";
 export function parseVerse(raw: unknown): Result<Verse, ParseError> {
   const parsed = VerseSchema.safeParse(raw);
   if (!parsed.success) return { ok: false, error: { kind: "invalid_verse" } };
-  return { ok: true, value: parsed.data }; // shape matches domain Verse
+  return { ok: true, value: parsed.data };
 }
 ```
-
-**Go port:** domain types port directly to structs; the parsing job becomes `encoding/json` + a `Validate() error` method.
 
 ---
 
@@ -155,8 +150,6 @@ default: {
 }
 ```
 
-**Go port:** sealed interface with a `Kind() string` method, or a tagged struct → `switch err.Kind { ... }`.
-
 ---
 
 ## Rule 6 — Branded IDs via a single factory — no `as BookId` casts
@@ -184,42 +177,43 @@ export function makeBookId(
 
 Casts outside the factory are a review-blocker.
 
-**Go port:** `type BookId string` with a `func NewBookId(s string) (BookId, error)` constructor — same pattern.
-
 ---
 
-## Rule 7 — No conditional, mapped, or template-literal types in domain or application
+## Rule 7 — Conditional, mapped, and template-literal types: judgment call *(loosened — ADR 0010)*
 
-These encode logic in the type system that humans (and Go) can't follow.
+The previous blanket ban on conditional/mapped/template-literal types in `src/domain/` and `src/application/` is lifted. The Go-port justification ("Go can't follow them") no longer applies.
+
+**Guidance:** allow where they genuinely simplify the type model and do not leak across layer boundaries; avoid where they obscure intent or make the type harder to read than the runtime equivalent.
 
 ```ts
-// ❌ AVOID — in src/domain/ or src/application/
+// ❌ AVOID — obscures intent, leaks complexity
 type FieldKey<T> = `${string & keyof T}_field`;
 type AsyncOf<T> = T extends Promise<infer U> ? U : never;
 
-// ✅ PREFER — explicit types
+// ✅ PREFER — explicit types where the intent is clear
 type ChapterField = "verses" | "footnotes" | "headings";
 ```
 
-Infrastructure (`src/api/`) **may** use them where Zod ergonomics require — but they must not cross the boundary back into domain or application.
+Infrastructure (`src/api/`) may continue using them freely where Zod ergonomics require.
 
 ---
 
-## Rule 8 — TUI business state in `useReducer`; `useState` for ephemeral UI noise only
+## Rule 8 — TUI business state in `useReducer`; `useState` for ephemeral UI only *(loosened — ADR 0010)*
+
+`useReducer` for business state is mandatory. The previous `[State, Effect | null]` tuple return constraint is retired — it was Bubble Tea parity, not a TypeScript concern.
+
+**New signature:** plain `(state, action) => State`.
 
 ```tsx
-// ❌ AVOID
-function ReadingView({ ref, translation }: Props) {
-  const [chapter, setChapter] = useState<Chapter | null>(null);
-  useEffect(() => {
-    fetchChapter(ref, translation).then(setChapter);
-  }, [ref, translation]);
-  // ...
+// ❌ AVOID — tuple return (retired)
+function reducer(state: State, action: Action): [State, Effect | null] {
+  switch (action.type) {
+    case "ChapterLoaded":
+      return [{ kind: "loaded", chapter: action.chapter }, null];
+  }
 }
-```
 
-```tsx
-// ✅ PREFER
+// ✅ PREFER — plain state return + object-with-keys dispatch (see Rule 13)
 type State =
   | { kind: "loading"; ref: Reference }
   | { kind: "loaded"; chapter: Chapter }
@@ -229,35 +223,50 @@ type Action =
   | { type: "ChapterLoaded"; chapter: Chapter }
   | { type: "ChapterFailed"; err: AppError };
 
-function reducer(state: State, action: Action): [State, Effect | null] {
-  switch (action.type) {
-    case "ChapterLoaded":
-      return [{ kind: "loaded", chapter: action.chapter }, null];
-    case "ChapterFailed":
-      return [{ kind: "error", err: action.err }, null];
-  }
+const handlers = {
+  ChapterLoaded: (_state, action): State => ({
+    kind: "loaded",
+    chapter: action.chapter,
+  }),
+  ChapterFailed: (_state, action): State => ({
+    kind: "error",
+    err: action.err,
+  }),
+} satisfies {
+  [K in Action["type"]]: (
+    state: State,
+    action: Extract<Action, { type: K }>,
+  ) => State;
+};
+
+function reducer(state: State, action: Action): State {
+  return (handlers[action.type] as (s: State, a: Action) => State)(
+    state,
+    action,
+  );
 }
 ```
 
 `useState` is fine for: input-field cursor position, modal-open booleans, animation timers, hover state. Anything you'd describe to a teammate at standup belongs in the reducer.
 
-**Go port:** the reducer signature `(state, action) => [state, effect]` is **exactly** Bubble Tea's `Update(msg) → (model, cmd)`. Mechanical.
-
 ---
 
-## Rule 9 — No `useEffect` for business logic
+## Rule 9 — `useEffect` for business logic *(retired — ADR 0010)*
+
+Retired. `useEffect` is now permitted for async business logic. CONVENTION: `useEffect` must call application use cases, never repository ports or adapters directly. Bypassing the use-case layer is the only forbidden pattern.
+
+<details>
+<summary>Original rule (historical record)</summary>
 
 Side effects are *described*, not invoked inline. The reducer returns an `Effect` descriptor; a single top-level effect runner executes it.
 
 ```tsx
-// ❌ AVOID
+// ❌ AVOID (under the old rule)
 useEffect(() => {
   saveBookmark(bookmark);
 }, [bookmark]);
-```
 
-```tsx
-// ✅ PREFER — in the reducer:
+// ✅ PREFERRED (under the old rule) — in the reducer:
 case "BookmarkRequested":
   return [state, { kind: "save_bookmark", bookmark: action.bookmark }];
 
@@ -269,46 +278,41 @@ async function run(effect: Effect, dispatch: Dispatch) {
       dispatch({ type: result.ok ? "BookmarkSaved" : "BookmarkFailed", ... });
       break;
     }
-    case "load_chapter": {
-      const result = await getPassage(effect.ref);
-      dispatch({ type: result.ok ? "ChapterLoaded" : "ChapterFailed", ... });
-      break;
-    }
-    // ...
   }
 }
 ```
 
-`useEffect` is acceptable for: pure DOM/terminal-side effects with no business meaning (e.g. focusing an input on mount, scrolling to top). If the effect calls a use case, parses something, or persists data — it belongs in the effect runner.
+**Justification (2026-05-09):** The TUI is the only layer fully rewritten in a Go port; getting the message/effect shape right was the difference between transcription and redesign. This rule was retired when the Go-port commitment was dropped (ADR 0010, 2026-05-11).
 
-**This is the most controversial rule.** It fights React idiom hard. Justification: the TUI is the only layer fully rewritten in a Go port; getting the message/effect shape right *now* is the difference between transcription and redesign.
-
-**Go port:** `Effect` → `tea.Cmd`. Identical concept.
+</details>
 
 ---
 
-## Rule 10 — TUI action names are past-tense facts
+## Rule 10 — TUI action names *(retired — ADR 0010)*
+
+Retired. The PascalCase past-tense requirement (`ChapterLoaded`, `KeyPressed`) was for Bubble Tea `tea.Msg` verbatim porting. Use whatever naming reads clearly in TypeScript — present-tense imperative or past-tense fact, whichever communicates intent better to the reader.
+
+<details>
+<summary>Original rule (historical record)</summary>
 
 Actions describe *what happened*, not *what to do*. They name events, not commands.
 
 ```ts
-// ❌ AVOID
+// ❌ AVOID (under the old rule)
 type Action =
   | { type: "loadChapter"; ref: Reference }
   | { type: "saveBookmark"; bookmark: Bookmark };
 
-// ✅ PREFER
+// ✅ PREFERRED (under the old rule)
 type Action =
   | { type: "ChapterLoaded"; chapter: Chapter }
   | { type: "ChapterFailed"; err: AppError }
-  | { type: "KeyPressed"; key: string }
-  | { type: "TranslationSwitched"; id: TranslationId }
-  | { type: "BookmarkSaved"; id: BookmarkId };
+  | { type: "KeyPressed"; key: string };
 ```
 
-User intent — "I want to load this chapter" — becomes an *Effect* (Rule 9), not an Action. Actions are facts about what *did* happen; effects are descriptions of what *should* happen next.
+**Justification (2026-05-09):** These names ported verbatim to Bubble Tea `tea.Msg`. Retired when Go-port commitment was dropped (ADR 0010, 2026-05-11).
 
-**Go port:** these names port verbatim to Bubble Tea — `type ChapterLoadedMsg struct { Chapter Chapter }`.
+</details>
 
 ---
 
@@ -351,8 +355,6 @@ const repo = withCache(
 );
 ```
 
-**Go port:** explicit struct embedding or wrapper structs with the same composition pattern.
-
 ---
 
 ## Rule 12 — Every async data function returns `Promise<Result<T, E>>`, never bare `Promise<T>`
@@ -373,7 +375,112 @@ async function getPassage(
 
 The exception is functions that genuinely can't fail (e.g. an in-memory transformation with no IO and validated input) — those can return `Promise<T>` directly. But if there's a network call, file IO, or parsing involved, it's `Result<T, E>`.
 
-**Go port:** `func GetPassage(ref Reference) (Passage, error)` — mechanical.
+---
+
+## Rule 13 — Prefer object-with-keys dispatch over `switch` for handler tables
+
+For reducers, event handlers, and effect runners — anything that dispatches on a discriminator field — prefer an object map of handlers over a `switch` statement. Each handler is a named, testable function. Adding a case is a single-key insertion. TypeScript still enforces exhaustiveness via `satisfies` and a mapped type.
+
+```ts
+type State =
+  | { kind: "loading"; ref: Reference }
+  | { kind: "loaded"; chapter: Chapter }
+  | { kind: "error"; err: AppError };
+
+type Action =
+  | { type: "ChapterLoaded"; chapter: Chapter }
+  | { type: "ChapterFailed"; err: AppError };
+
+// ❌ AVOID — switch for handler dispatch
+function reducer(state: State, action: Action): State {
+  switch (action.type) {
+    case "ChapterLoaded":
+      return { kind: "loaded", chapter: action.chapter };
+    case "ChapterFailed":
+      return { kind: "error", err: action.err };
+    default:
+      return state;
+  }
+}
+
+// ✅ PREFER — object handler table
+const handlers = {
+  ChapterLoaded: (_state, action): State => ({
+    kind: "loaded",
+    chapter: action.chapter,
+  }),
+  ChapterFailed: (_state, action): State => ({
+    kind: "error",
+    err: action.err,
+  }),
+} satisfies {
+  [K in Action["type"]]: (
+    state: State,
+    action: Extract<Action, { type: K }>,
+  ) => State;
+};
+
+function reducer(state: State, action: Action): State {
+  return (handlers[action.type] as (s: State, a: Action) => State)(
+    state,
+    action,
+  );
+}
+```
+
+The `satisfies` clause keeps each handler's narrow action type intact while guaranteeing every variant of `Action["type"]` has a handler. The cast at the call site is the only TypeScript friction — it's the price of swapping `switch`-based narrowing for table-driven dispatch.
+
+**Where `switch` is still the better tool:** matching on a discriminated union with an exhaustive `never` check (see Rule 5 — formatting a domain error). The compiler-enforced exhaustiveness via `never` is more direct than a handler table. Use `switch` for *narrowing-as-control-flow*; use objects for *handler dispatch*.
+
+```ts
+// ✅ switch is appropriate here — narrowing for inline formatting, not dispatching to handlers
+function format(err: ParseError): string {
+  switch (err.kind) {
+    case "unknown_book":
+      return `Don't know "${err.input}"`;
+    case "out_of_range":
+      return `Chapter ${err.chapter} > max ${err.max}`;
+    case "empty_input":
+      return "Reference cannot be empty";
+  }
+}
+```
+
+If a reducer has only one action variant (e.g. a placeholder reducer that returns state unchanged), still use the object form — it sets the slot for future variants without a structural change later.
+
+---
+
+## Rule 14 — Default to no comments; ship only the WHY of non-obvious decisions
+
+Code that restates itself in a comment is noise. Filenames, identifiers, and type signatures already say what the code does. A comment earns its place only when it captures a hidden constraint, a subtle invariant, a workaround for a known bug, or behaviour that would surprise a future reader.
+
+```ts
+// ❌ AVOID — header banners and code-paraphrase
+// src/tui/foo.ts — pure state machine for foo.
+// Zero imports from OpenTUI, React, domain, application, or api.
+
+/** Pure reducer per ADR 0010 — plain (state, action) => State. */
+export function fooReducer(state: FooState, action: FooAction): FooState {
+  // dispatch on action.type
+  return handlers[action.type](state, action);
+}
+```
+
+```ts
+// ✅ PREFER — silent on the obvious, explicit on the surprising
+export function fooReducer(state: FooState, action: FooAction): FooState {
+  return handlers[action.type](state, action);
+}
+
+// exitOnCtrlC: false — we route SIGINT through the same quit path as `q`.
+const renderer = await createCliRenderer({ exitOnCtrlC: false });
+```
+
+**Keep:** comments that document a non-obvious decision (the `exitOnCtrlC: false` example above), a temporal workaround, an invariant the type system can't capture, or a pointer to logic that lives elsewhere when the reader would expect it here.
+
+**Drop:** file-banner comments, section dividers (`// --- API ---`), rule-citation footnotes (`// per ADR 0010`), restatements of the line below, and TODO comments without a tracked issue.
+
+This rule applies to source files. ADRs, house-rules, and openspec markdown are documentation — they are not bound by it.
 
 ---
 
@@ -381,13 +488,13 @@ The exception is functions that genuinely can't fail (e.g. an in-memory transfor
 
 In code review, comments cite a rule by number:
 
-> "Rule 9 — fetching here belongs in an Effect, not `useEffect`. Move the call to the reducer's `Effect` return + the effect-runner."
+> "Rule 9 (convention) — `useEffect` must call the application use case (`getPassage`), not the repository port directly."
 
 > "Rule 1 — domain function shouldn't throw. Return `Result<Reference, ParseError>` instead."
 
 > "Rule 6 — `as BookId` outside `makeBookId` is a portability risk. Use the factory."
 
-If a rule blocks legitimate work, raise it — rules can be revisited (see [ADR 0009](decisions/0009-language-portable-architecture.md) for revisit triggers). But the default is **enforce, not bend**.
+If a rule blocks legitimate work, raise it — rules can be revisited (see [ADR 0010](decisions/0010-typescript-native-architecture.md) for the current governing decision). But the default is **enforce, not bend**.
 
 ## What this is *not*
 
