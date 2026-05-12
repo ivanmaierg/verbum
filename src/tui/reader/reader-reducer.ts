@@ -1,4 +1,6 @@
 import { parseReference } from "@/domain/reference";
+import { suggestBooks } from "@/domain/book-suggestions";
+import type { BookSuggestion } from "@/domain/book-suggestions";
 import type { Reference } from "@/domain/reference";
 import type { ParseError, RepoError } from "@/domain/errors";
 import type { Passage } from "@/domain/passage";
@@ -6,7 +8,7 @@ import type { Passage } from "@/domain/passage";
 export const VERSES_PER_PAGE = 15;
 
 export type ReaderState =
-  | { kind: "awaiting"; query: string; parseError: ParseError | null }
+  | { kind: "awaiting"; query: string; parseError: ParseError | null; suggestions: BookSuggestion[]; selectedIndex: number }
   | { kind: "loading"; ref: Reference }
   | { kind: "loaded"; passage: Passage; ref: Reference; cursorIndex: number; pageStartIndex: number }
   | { kind: "network-error"; ref: Reference; reason: RepoError };
@@ -22,11 +24,16 @@ export type ReaderAction =
   | { type: "CursorMovedUp" }
   | { type: "CursorMovedDown" }
   | { type: "PageAdvanced" }
-  | { type: "PageRetreated" };
+  | { type: "PageRetreated" }
+  | { type: "SuggestionMovedUp" }
+  | { type: "SuggestionMovedDown" }
+  | { type: "SuggestionAccepted" };
 
 const handlers = {
   QueryTyped: (s: ReaderState, a: Extract<ReaderAction, { type: "QueryTyped" }>): ReaderState =>
-    s.kind === "awaiting" ? { ...s, query: a.query, parseError: null } : s,
+    s.kind === "awaiting"
+      ? { ...s, query: a.query, parseError: null, suggestions: suggestBooks(a.query), selectedIndex: -1 }
+      : s,
 
   QuerySubmitted: (s: ReaderState, _a: Extract<ReaderAction, { type: "QuerySubmitted" }>): ReaderState => {
     if (s.kind !== "awaiting") return s;
@@ -63,7 +70,7 @@ const handlers = {
 
   PaletteReopened: (s: ReaderState, _a: Extract<ReaderAction, { type: "PaletteReopened" }>): ReaderState =>
     s.kind === "loaded" || s.kind === "network-error"
-      ? { kind: "awaiting", query: "", parseError: null }
+      ? { kind: "awaiting", query: "", parseError: null, suggestions: [], selectedIndex: -1 }
       : s,
 
   CursorMovedDown: (s: ReaderState, _a: Extract<ReaderAction, { type: "CursorMovedDown" }>): ReaderState => {
@@ -102,6 +109,24 @@ const handlers = {
     const newPageStart = s.pageStartIndex - VERSES_PER_PAGE;
     return { ...s, pageStartIndex: newPageStart, cursorIndex: newPageStart };
   },
+
+  SuggestionMovedDown: (s: ReaderState, _a: Extract<ReaderAction, { type: "SuggestionMovedDown" }>): ReaderState => {
+    if (s.kind !== "awaiting" || s.suggestions.length === 0) return s;
+    const next = Math.min(s.selectedIndex + 1, s.suggestions.length - 1);
+    return { ...s, selectedIndex: next };
+  },
+
+  SuggestionMovedUp: (s: ReaderState, _a: Extract<ReaderAction, { type: "SuggestionMovedUp" }>): ReaderState => {
+    if (s.kind !== "awaiting" || s.suggestions.length === 0) return s;
+    const next = Math.max(s.selectedIndex - 1, 0);
+    return { ...s, selectedIndex: next };
+  },
+
+  SuggestionAccepted: (s: ReaderState, _a: Extract<ReaderAction, { type: "SuggestionAccepted" }>): ReaderState => {
+    if (s.kind !== "awaiting" || s.selectedIndex < 0) return s;
+    const chosen = s.suggestions[s.selectedIndex];
+    return { ...s, query: `${chosen.displayName} `, suggestions: [], selectedIndex: -1 };
+  },
 } satisfies {
   [K in ReaderAction["type"]]: (
     state: ReaderState,
@@ -120,4 +145,6 @@ export const initialReaderState: ReaderState = {
   kind: "awaiting",
   query: "",
   parseError: null,
+  suggestions: [],
+  selectedIndex: -1,
 };
