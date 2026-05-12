@@ -1,6 +1,7 @@
 import { describe, it, expect } from "bun:test";
 import { readerReducer, initialReaderState, VERSES_PER_PAGE } from "@/tui/reader/reader-reducer";
 import type { ReaderState, ReaderAction } from "@/tui/reader/reader-reducer";
+import type { BookSuggestion } from "@/domain/book-suggestions";
 import type { Passage } from "@/domain/passage";
 import type { RepoError } from "@/domain/errors";
 import type { Reference } from "@/domain/reference";
@@ -42,11 +43,13 @@ function dispatch(state: ReaderState, action: ReaderAction): ReaderState {
 
 describe("readerReducer", () => {
   describe("initial state", () => {
-    it("starts in awaiting with empty query and no parseError", () => {
+    it("starts in awaiting with empty query, no parseError, empty suggestions, and selectedIndex -1", () => {
       expect(initialReaderState).toEqual({
         kind: "awaiting",
         query: "",
         parseError: null,
+        suggestions: [],
+        selectedIndex: -1,
       });
     });
   });
@@ -58,10 +61,35 @@ describe("readerReducer", () => {
   });
 
   describe("QueryTyped", () => {
-    it("updates query and clears parseError when awaiting", () => {
-      const state: ReaderState = { kind: "awaiting", query: "", parseError: { kind: "empty_input" } };
-      const next = dispatch(state, { type: "QueryTyped", query: "john 3" });
-      expect(next).toEqual({ kind: "awaiting", query: "john 3", parseError: null });
+    it("updates query, clears parseError, recomputes suggestions, and resets selectedIndex when awaiting", () => {
+      const state: ReaderState = {
+        kind: "awaiting",
+        query: "",
+        parseError: { kind: "empty_input" },
+        suggestions: [],
+        selectedIndex: 2,
+      };
+      const next = dispatch(state, { type: "QueryTyped", query: "joh" });
+      expect(next.kind).toBe("awaiting");
+      if (next.kind !== "awaiting") return;
+      expect(next.query).toBe("joh");
+      expect(next.parseError).toBeNull();
+      expect(next.selectedIndex).toBe(-1);
+      expect(next.suggestions.length).toBeGreaterThan(0);
+    });
+
+    it("populates suggestions matching the query", () => {
+      const state: ReaderState = {
+        kind: "awaiting",
+        query: "",
+        parseError: null,
+        suggestions: [],
+        selectedIndex: -1,
+      };
+      const next = dispatch(state, { type: "QueryTyped", query: "joh" });
+      if (next.kind !== "awaiting") return;
+      const displayNames = next.suggestions.map((s) => s.displayName);
+      expect(displayNames).toContain("John");
     });
 
     it("is a no-op when not awaiting", () => {
@@ -73,7 +101,7 @@ describe("readerReducer", () => {
 
   describe("QuerySubmitted", () => {
     it("transitions awaiting → loading when query parses ok", () => {
-      const state: ReaderState = { kind: "awaiting", query: "john 3", parseError: null };
+      const state: ReaderState = { kind: "awaiting", query: "john 3", parseError: null, suggestions: [], selectedIndex: -1 };
       const next = dispatch(state, { type: "QuerySubmitted" });
       expect(next.kind).toBe("loading");
       if (next.kind !== "loading") return;
@@ -82,7 +110,7 @@ describe("readerReducer", () => {
     });
 
     it("stays awaiting with parseError when query is malformed", () => {
-      const state: ReaderState = { kind: "awaiting", query: "jhn 3x", parseError: null };
+      const state: ReaderState = { kind: "awaiting", query: "jhn 3x", parseError: null, suggestions: [], selectedIndex: -1 };
       const next = dispatch(state, { type: "QuerySubmitted" });
       expect(next.kind).toBe("awaiting");
       if (next.kind !== "awaiting") return;
@@ -91,7 +119,7 @@ describe("readerReducer", () => {
     });
 
     it("stays awaiting with parseError for empty query", () => {
-      const state: ReaderState = { kind: "awaiting", query: "", parseError: null };
+      const state: ReaderState = { kind: "awaiting", query: "", parseError: null, suggestions: [], selectedIndex: -1 };
       const next = dispatch(state, { type: "QuerySubmitted" });
       expect(next.kind).toBe("awaiting");
       if (next.kind !== "awaiting") return;
@@ -231,16 +259,28 @@ describe("readerReducer", () => {
   });
 
   describe("PaletteReopened", () => {
-    it("transitions loaded → awaiting with cleared query", () => {
+    it("transitions loaded → awaiting with cleared query, empty suggestions, selectedIndex -1", () => {
       const state = makeLoaded(mockPassage, 0, 0);
       const next = dispatch(state, { type: "PaletteReopened" });
-      expect(next).toEqual({ kind: "awaiting", query: "", parseError: null });
+      expect(next).toEqual({
+        kind: "awaiting",
+        query: "",
+        parseError: null,
+        suggestions: [],
+        selectedIndex: -1,
+      });
     });
 
-    it("transitions network-error → awaiting with cleared query", () => {
+    it("transitions network-error → awaiting with cleared query, empty suggestions, selectedIndex -1", () => {
       const state: ReaderState = { kind: "network-error", ref: johnRef, reason: networkError };
       const next = dispatch(state, { type: "PaletteReopened" });
-      expect(next).toEqual({ kind: "awaiting", query: "", parseError: null });
+      expect(next).toEqual({
+        kind: "awaiting",
+        query: "",
+        parseError: null,
+        suggestions: [],
+        selectedIndex: -1,
+      });
     });
 
     it("is a no-op from awaiting", () => {
@@ -264,7 +304,7 @@ describe("readerReducer", () => {
     ];
 
     const nonLoadedStates: ReaderState[] = [
-      { kind: "awaiting", query: "", parseError: null },
+      { kind: "awaiting", query: "", parseError: null, suggestions: [], selectedIndex: -1 },
       { kind: "loading", ref: johnRef },
       { kind: "network-error", ref: johnRef, reason: networkError },
     ];
@@ -354,6 +394,90 @@ describe("readerReducer", () => {
       const p = makePassage(10);
       const state = makeLoaded(p, 2, 0);
       const next = dispatch(state, { type: "PageRetreated" });
+      expect(next).toBe(state);
+    });
+  });
+
+  const mockSuggestions: BookSuggestion[] = [
+    { alias: "john", canonical: "JHN", displayName: "John" },
+    { alias: "1john", canonical: "1JN", displayName: "1 John" },
+    { alias: "2john", canonical: "2JN", displayName: "2 John" },
+    { alias: "3john", canonical: "3JN", displayName: "3 John" },
+  ];
+
+  function makeAwaiting(overrides: Partial<{
+    query: string;
+    parseError: null | { kind: string };
+    suggestions: BookSuggestion[];
+    selectedIndex: number;
+  }> = {}): ReaderState {
+    return {
+      kind: "awaiting",
+      query: "",
+      parseError: null,
+      suggestions: [],
+      selectedIndex: -1,
+      ...overrides,
+    } as ReaderState;
+  }
+
+  describe("SuggestionMovedDown", () => {
+    it("increments selectedIndex from -1 to 0", () => {
+      const state = makeAwaiting({ suggestions: mockSuggestions, selectedIndex: -1 });
+      const next = dispatch(state, { type: "SuggestionMovedDown" });
+      if (next.kind !== "awaiting") throw new Error("expected awaiting");
+      expect(next.selectedIndex).toBe(0);
+    });
+
+    it("clamps at bottom (suggestions.length - 1)", () => {
+      const state = makeAwaiting({ suggestions: mockSuggestions, selectedIndex: 3 });
+      const next = dispatch(state, { type: "SuggestionMovedDown" });
+      if (next.kind !== "awaiting") throw new Error("expected awaiting");
+      expect(next.selectedIndex).toBe(3);
+    });
+
+    it("is a no-op when suggestions is empty", () => {
+      const state = makeAwaiting({ suggestions: [], selectedIndex: -1 });
+      const next = dispatch(state, { type: "SuggestionMovedDown" });
+      expect(next).toBe(state);
+    });
+  });
+
+  describe("SuggestionMovedUp", () => {
+    it("decrements selectedIndex from 2 to 1", () => {
+      const state = makeAwaiting({ suggestions: mockSuggestions, selectedIndex: 2 });
+      const next = dispatch(state, { type: "SuggestionMovedUp" });
+      if (next.kind !== "awaiting") throw new Error("expected awaiting");
+      expect(next.selectedIndex).toBe(1);
+    });
+
+    it("clamps at 0 (does not return to -1)", () => {
+      const state = makeAwaiting({ suggestions: mockSuggestions, selectedIndex: 0 });
+      const next = dispatch(state, { type: "SuggestionMovedUp" });
+      if (next.kind !== "awaiting") throw new Error("expected awaiting");
+      expect(next.selectedIndex).toBe(0);
+    });
+
+    it("is a no-op when suggestions is empty", () => {
+      const state = makeAwaiting({ suggestions: [], selectedIndex: -1 });
+      const next = dispatch(state, { type: "SuggestionMovedUp" });
+      expect(next).toBe(state);
+    });
+  });
+
+  describe("SuggestionAccepted", () => {
+    it("sets query to displayName + space, clears suggestions, resets selectedIndex", () => {
+      const state = makeAwaiting({ suggestions: mockSuggestions, selectedIndex: 1 });
+      const next = dispatch(state, { type: "SuggestionAccepted" });
+      if (next.kind !== "awaiting") throw new Error("expected awaiting");
+      expect(next.query).toBe("1 John ");
+      expect(next.suggestions).toEqual([]);
+      expect(next.selectedIndex).toBe(-1);
+    });
+
+    it("is a no-op when selectedIndex is -1", () => {
+      const state = makeAwaiting({ suggestions: mockSuggestions, selectedIndex: -1 });
+      const next = dispatch(state, { type: "SuggestionAccepted" });
       expect(next).toBe(state);
     });
   });

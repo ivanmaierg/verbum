@@ -22,7 +22,7 @@ export type Reference = {
 // Book alias map — normalised lookup: lower-case alias → USFM canonical ID.
 // Add aliases here when new books need coverage; domain logic stays unchanged.
 // ---------------------------------------------------------------------------
-const BOOK_ALIASES: Record<string, string> = {
+export const BOOK_ALIASES: Record<string, string> = {
   // Genesis
   genesis: "GEN", gen: "GEN",
   // Exodus
