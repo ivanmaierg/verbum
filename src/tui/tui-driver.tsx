@@ -1,21 +1,21 @@
 import { useReducer } from "react";
 import { createCliRenderer } from "@opentui/core";
 import { createRoot, useKeyboard } from "@opentui/react";
-import {
-  welcomeReducer,
-  initialWelcomeState,
-} from "./welcome/welcome-reducer";
-import { WelcomeScreen } from "./welcome/welcome-screen";
+import { readerReducer, initialReaderState } from "./reader/reader-reducer";
+import { ReaderScreen } from "./reader/reader-screen";
 import type { CliRenderer } from "@opentui/core";
+import type { BibleRepository } from "@/application/ports/bible-repository";
 
-function App({
+function ReaderApp({
   renderer,
   resolve,
+  repo,
 }: {
   renderer: CliRenderer;
   resolve: () => void;
+  repo: BibleRepository;
 }) {
-  const [state, dispatch] = useReducer(welcomeReducer, initialWelcomeState);
+  const [state, dispatch] = useReducer(readerReducer, initialReaderState);
 
   useKeyboard((keyEvent) => {
     if (keyEvent.name === "q" || keyEvent.name === "Q") {
@@ -23,14 +23,25 @@ function App({
       resolve();
       return;
     }
-    dispatch({ type: "KeyPressed", key: keyEvent.name });
+    if (keyEvent.name === "]") {
+      dispatch({ type: "ChapterAdvanced" });
+      return;
+    }
+    if (keyEvent.name === "[") {
+      dispatch({ type: "ChapterRetreated" });
+      return;
+    }
+    if (keyEvent.name === "/") {
+      dispatch({ type: "PaletteReopened" });
+      return;
+    }
   });
 
-  return <WelcomeScreen state={state} dispatch={dispatch} />;
+  return <ReaderScreen state={state} dispatch={dispatch} repo={repo} />;
 }
 
 // Resolves when the user quits. Does NOT call process.exit — that's the entry point's job.
-export async function tuiDriver(): Promise<void> {
+export async function tuiDriver(repo: BibleRepository): Promise<void> {
   if (!process.stdout.isTTY) {
     process.stderr.write(
       "verbum: interactive TUI requires a TTY — run without piping\n",
@@ -64,7 +75,7 @@ export async function tuiDriver(): Promise<void> {
     };
 
     createRoot(renderer).render(
-      <App renderer={renderer} resolve={wrappedResolve} />,
+      <ReaderApp renderer={renderer} resolve={wrappedResolve} repo={repo} />,
     );
   });
 }
