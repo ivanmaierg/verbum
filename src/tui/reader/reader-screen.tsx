@@ -1,12 +1,15 @@
 import { useState, useEffect } from "react";
 import { TextAttributes } from "@opentui/core";
 import { SPINNER_FRAMES } from "@/cli/loading";
+import { ACCENT_HEX } from "@/presentation/colors";
 import { usePassageFetch } from "@/tui/reader/use-passage-fetch";
+import { VERSES_PER_PAGE } from "@/tui/reader/reader-reducer";
 import type { BibleRepository } from "@/application/ports/bible-repository";
 import type { ReaderState, ReaderAction } from "@/tui/reader/reader-reducer";
 import type { Dispatch } from "react";
 
 const DIM = TextAttributes.DIM;
+const INVERSE = TextAttributes.INVERSE;
 
 type ReaderScreenProps = {
   state: ReaderState;
@@ -58,7 +61,7 @@ function bottomTitleFor(state: ReaderState): string {
     case "loading":
       return " loading…  •  q quit ";
     case "loaded":
-      return " ] next ch  •  [ prev ch  •  / palette  •  q quit ";
+      return " ↑↓ verse  •  [ ] page  •  n p chapter  •  / palette  •  q quit ";
     case "network-error":
       return " / palette  •  q quit ";
   }
@@ -106,14 +109,24 @@ function Body({ state, dispatch, frame }: BodyProps) {
     );
   }
 
+  const { passage, cursorIndex, pageStartIndex } = state;
+  const pageVerses = passage.verses.slice(pageStartIndex, pageStartIndex + VERSES_PER_PAGE);
+
   return (
     <box flexDirection="column">
-      {state.passage.verses.map((v) => (
-        <text key={v.number}>
-          <span attributes={DIM}>{`${String(v.number).padStart(3)}  `}</span>
-          {v.text}
-        </text>
-      ))}
+      {pageVerses.map((v, i) => {
+        const idx = pageStartIndex + i;
+        const focused = idx === cursorIndex;
+        return (
+          <text key={v.number}>
+            <span fg={focused ? ACCENT_HEX : undefined} attributes={DIM}>
+              {focused ? "▶" : " "}
+            </span>
+            <span attributes={DIM}>{`${String(v.number).padStart(3)}  `}</span>
+            <span attributes={focused ? INVERSE : undefined}>{v.text}</span>
+          </text>
+        );
+      })}
     </box>
   );
 }
