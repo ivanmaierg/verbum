@@ -1,6 +1,3 @@
-// src/tui/welcome/welcome-reducer.test.ts — unit tests for the welcome screen reducer.
-// No OpenTUI imports, no terminal allocation — pure function tests.
-
 import { describe, it, expect } from "bun:test";
 import {
   welcomeReducer,

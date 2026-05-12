@@ -213,7 +213,7 @@ function reducer(state: State, action: Action): [State, Effect | null] {
   }
 }
 
-// ✅ PREFER — plain state return
+// ✅ PREFER — plain state return + object-with-keys dispatch (see Rule 13)
 type State =
   | { kind: "loading"; ref: Reference }
   | { kind: "loaded"; chapter: Chapter }
@@ -223,15 +223,27 @@ type Action =
   | { type: "ChapterLoaded"; chapter: Chapter }
   | { type: "ChapterFailed"; err: AppError };
 
+const handlers = {
+  ChapterLoaded: (_state, action): State => ({
+    kind: "loaded",
+    chapter: action.chapter,
+  }),
+  ChapterFailed: (_state, action): State => ({
+    kind: "error",
+    err: action.err,
+  }),
+} satisfies {
+  [K in Action["type"]]: (
+    state: State,
+    action: Extract<Action, { type: K }>,
+  ) => State;
+};
+
 function reducer(state: State, action: Action): State {
-  switch (action.type) {
-    case "ChapterLoaded":
-      return { kind: "loaded", chapter: action.chapter };
-    case "ChapterFailed":
-      return { kind: "error", err: action.err };
-    default:
-      return state;
-  }
+  return (handlers[action.type] as (s: State, a: Action) => State)(
+    state,
+    action,
+  );
 }
 ```
 
@@ -362,6 +374,113 @@ async function getPassage(
 ```
 
 The exception is functions that genuinely can't fail (e.g. an in-memory transformation with no IO and validated input) — those can return `Promise<T>` directly. But if there's a network call, file IO, or parsing involved, it's `Result<T, E>`.
+
+---
+
+## Rule 13 — Prefer object-with-keys dispatch over `switch` for handler tables
+
+For reducers, event handlers, and effect runners — anything that dispatches on a discriminator field — prefer an object map of handlers over a `switch` statement. Each handler is a named, testable function. Adding a case is a single-key insertion. TypeScript still enforces exhaustiveness via `satisfies` and a mapped type.
+
+```ts
+type State =
+  | { kind: "loading"; ref: Reference }
+  | { kind: "loaded"; chapter: Chapter }
+  | { kind: "error"; err: AppError };
+
+type Action =
+  | { type: "ChapterLoaded"; chapter: Chapter }
+  | { type: "ChapterFailed"; err: AppError };
+
+// ❌ AVOID — switch for handler dispatch
+function reducer(state: State, action: Action): State {
+  switch (action.type) {
+    case "ChapterLoaded":
+      return { kind: "loaded", chapter: action.chapter };
+    case "ChapterFailed":
+      return { kind: "error", err: action.err };
+    default:
+      return state;
+  }
+}
+
+// ✅ PREFER — object handler table
+const handlers = {
+  ChapterLoaded: (_state, action): State => ({
+    kind: "loaded",
+    chapter: action.chapter,
+  }),
+  ChapterFailed: (_state, action): State => ({
+    kind: "error",
+    err: action.err,
+  }),
+} satisfies {
+  [K in Action["type"]]: (
+    state: State,
+    action: Extract<Action, { type: K }>,
+  ) => State;
+};
+
+function reducer(state: State, action: Action): State {
+  return (handlers[action.type] as (s: State, a: Action) => State)(
+    state,
+    action,
+  );
+}
+```
+
+The `satisfies` clause keeps each handler's narrow action type intact while guaranteeing every variant of `Action["type"]` has a handler. The cast at the call site is the only TypeScript friction — it's the price of swapping `switch`-based narrowing for table-driven dispatch.
+
+**Where `switch` is still the better tool:** matching on a discriminated union with an exhaustive `never` check (see Rule 5 — formatting a domain error). The compiler-enforced exhaustiveness via `never` is more direct than a handler table. Use `switch` for *narrowing-as-control-flow*; use objects for *handler dispatch*.
+
+```ts
+// ✅ switch is appropriate here — narrowing for inline formatting, not dispatching to handlers
+function format(err: ParseError): string {
+  switch (err.kind) {
+    case "unknown_book":
+      return `Don't know "${err.input}"`;
+    case "out_of_range":
+      return `Chapter ${err.chapter} > max ${err.max}`;
+    case "empty_input":
+      return "Reference cannot be empty";
+  }
+}
+```
+
+If a reducer has only one action variant (e.g. a placeholder reducer that returns state unchanged), still use the object form — it sets the slot for future variants without a structural change later.
+
+---
+
+## Rule 14 — Default to no comments; ship only the WHY of non-obvious decisions
+
+Code that restates itself in a comment is noise. Filenames, identifiers, and type signatures already say what the code does. A comment earns its place only when it captures a hidden constraint, a subtle invariant, a workaround for a known bug, or behaviour that would surprise a future reader.
+
+```ts
+// ❌ AVOID — header banners and code-paraphrase
+// src/tui/foo.ts — pure state machine for foo.
+// Zero imports from OpenTUI, React, domain, application, or api.
+
+/** Pure reducer per ADR 0010 — plain (state, action) => State. */
+export function fooReducer(state: FooState, action: FooAction): FooState {
+  // dispatch on action.type
+  return handlers[action.type](state, action);
+}
+```
+
+```ts
+// ✅ PREFER — silent on the obvious, explicit on the surprising
+export function fooReducer(state: FooState, action: FooAction): FooState {
+  return handlers[action.type](state, action);
+}
+
+// exitOnCtrlC: false — we route SIGINT through the same quit path as `q`.
+const renderer = await createCliRenderer({ exitOnCtrlC: false });
+```
+
+**Keep:** comments that document a non-obvious decision (the `exitOnCtrlC: false` example above), a temporal workaround, an invariant the type system can't capture, or a pointer to logic that lives elsewhere when the reader would expect it here.
+
+**Drop:** file-banner comments, section dividers (`// --- API ---`), rule-citation footnotes (`// per ADR 0010`), restatements of the line below, and TODO comments without a tracked issue.
+
+This rule applies to source files. ADRs, house-rules, and openspec markdown are documentation — they are not bound by it.
 
 ---
 
