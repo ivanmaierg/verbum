@@ -52,8 +52,8 @@ describe("readerReducer", () => {
   });
 
   describe("VERSES_PER_PAGE", () => {
-    it("equals 8", () => {
-      expect(VERSES_PER_PAGE).toBe(8);
+    it("equals 15", () => {
+      expect(VERSES_PER_PAGE).toBe(15);
     });
   });
 
@@ -118,26 +118,26 @@ describe("readerReducer", () => {
       });
     });
 
-    it("positions cursor on the verse matching ref.verses.start", () => {
-      // John 3:16 — passage has 36 verses, target verse 16 should land at index 15.
-      const passage = makePassage(36);
-      const ref: Reference = { ...johnRef, verses: { start: 16, end: 16 } };
+    it("positions cursor on the verse matching ref.verses.start (page 2)", () => {
+      const passage = makePassage(VERSES_PER_PAGE * 3);
+      const targetVerse = VERSES_PER_PAGE + 1;
+      const ref: Reference = { ...johnRef, verses: { start: targetVerse, end: targetVerse } };
       const state: ReaderState = { kind: "loading", ref };
       const next = dispatch(state, { type: "PassageFetched", passage });
       if (next.kind !== "loaded") throw new Error("expected loaded state");
-      expect(next.cursorIndex).toBe(15);
-      // Verse 16 (index 15) belongs to page 2 (indices 8-15) when VERSES_PER_PAGE === 8.
-      expect(next.pageStartIndex).toBe(8);
+      expect(next.cursorIndex).toBe(targetVerse - 1);
+      expect(next.pageStartIndex).toBe(VERSES_PER_PAGE);
     });
 
-    it("places page boundary correctly on the third page (verse 17 → index 16, page 3)", () => {
-      const passage = makePassage(36);
-      const ref: Reference = { ...johnRef, verses: { start: 17, end: 17 } };
+    it("places page boundary correctly on the third page", () => {
+      const passage = makePassage(VERSES_PER_PAGE * 3);
+      const targetVerse = VERSES_PER_PAGE * 2 + 1;
+      const ref: Reference = { ...johnRef, verses: { start: targetVerse, end: targetVerse } };
       const state: ReaderState = { kind: "loading", ref };
       const next = dispatch(state, { type: "PassageFetched", passage });
       if (next.kind !== "loaded") throw new Error("expected loaded state");
-      expect(next.cursorIndex).toBe(16);
-      expect(next.pageStartIndex).toBe(16);
+      expect(next.cursorIndex).toBe(targetVerse - 1);
+      expect(next.pageStartIndex).toBe(VERSES_PER_PAGE * 2);
     });
 
     it("is a no-op when not loading", () => {
@@ -287,15 +287,16 @@ describe("readerReducer", () => {
     });
 
     it("advances page and resets cursor at page boundary", () => {
-      const p = makePassage(16);
-      const state = makeLoaded(p, 7, 0);
+      const p = makePassage(VERSES_PER_PAGE * 2);
+      const state = makeLoaded(p, VERSES_PER_PAGE - 1, 0);
       const next = dispatch(state, { type: "CursorMovedDown" });
-      expect(next).toEqual(makeLoaded(p, 8, 8));
+      expect(next).toEqual(makeLoaded(p, VERSES_PER_PAGE, VERSES_PER_PAGE));
     });
 
     it("clamps at last verse of last page", () => {
-      const p = makePassage(10);
-      const state = makeLoaded(p, 9, 8);
+      const total = VERSES_PER_PAGE + 2;
+      const p = makePassage(total);
+      const state = makeLoaded(p, total - 1, VERSES_PER_PAGE);
       const next = dispatch(state, { type: "CursorMovedDown" });
       expect(next).toBe(state);
     });
@@ -310,10 +311,10 @@ describe("readerReducer", () => {
     });
 
     it("retreats page and sets cursor to last verse of retreated page", () => {
-      const p = makePassage(16);
-      const state = makeLoaded(p, 8, 8);
+      const p = makePassage(VERSES_PER_PAGE * 2);
+      const state = makeLoaded(p, VERSES_PER_PAGE, VERSES_PER_PAGE);
       const next = dispatch(state, { type: "CursorMovedUp" });
-      expect(next).toEqual(makeLoaded(p, 7, 0));
+      expect(next).toEqual(makeLoaded(p, VERSES_PER_PAGE - 1, 0));
     });
 
     it("clamps at first verse of first page", () => {
@@ -326,15 +327,16 @@ describe("readerReducer", () => {
 
   describe("PageAdvanced", () => {
     it("advances to next page and sets cursorIndex to pageStartIndex", () => {
-      const p = makePassage(16);
+      const p = makePassage(VERSES_PER_PAGE * 2);
       const state = makeLoaded(p, 3, 0);
       const next = dispatch(state, { type: "PageAdvanced" });
-      expect(next).toEqual(makeLoaded(p, 8, 8));
+      expect(next).toEqual(makeLoaded(p, VERSES_PER_PAGE, VERSES_PER_PAGE));
     });
 
     it("clamps at last page", () => {
-      const p = makePassage(10);
-      const state = makeLoaded(p, 9, 8);
+      const total = VERSES_PER_PAGE + 2;
+      const p = makePassage(total);
+      const state = makeLoaded(p, total - 1, VERSES_PER_PAGE);
       const next = dispatch(state, { type: "PageAdvanced" });
       expect(next).toBe(state);
     });
@@ -342,8 +344,8 @@ describe("readerReducer", () => {
 
   describe("PageRetreated", () => {
     it("retreats to previous page and sets cursorIndex to new pageStartIndex", () => {
-      const p = makePassage(16);
-      const state = makeLoaded(p, 10, 8);
+      const p = makePassage(VERSES_PER_PAGE * 2);
+      const state = makeLoaded(p, VERSES_PER_PAGE + 2, VERSES_PER_PAGE);
       const next = dispatch(state, { type: "PageRetreated" });
       expect(next).toEqual(makeLoaded(p, 0, 0));
     });

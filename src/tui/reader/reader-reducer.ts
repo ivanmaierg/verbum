@@ -3,7 +3,7 @@ import type { Reference } from "@/domain/reference";
 import type { ParseError, RepoError } from "@/domain/errors";
 import type { Passage } from "@/domain/passage";
 
-export const VERSES_PER_PAGE = 8;
+export const VERSES_PER_PAGE = 15;
 
 export type ReaderState =
   | { kind: "awaiting"; query: string; parseError: ParseError | null }
