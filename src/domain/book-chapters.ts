@@ -21,5 +21,5 @@ export const BOOK_CHAPTERS: Record<string, number> = {
 };
 
 export function chaptersForBook(canonical: string): number {
-  return BOOK_CHAPTERS[canonical] ?? 0;
+  return BOOK_CHAPTERS[canonical.toUpperCase()] ?? 0;
 }

@@ -23,7 +23,8 @@ function App({
   const [readerState, dispatch] = useReducer(readerReducer, initialReaderState);
 
   useKeyboard((keyEvent) => {
-    if (keyEvent.name === "q" || keyEvent.name === "Q") {
+    const name = keyEvent.name.toLowerCase();
+    if (name === "q") {
       renderer.destroy();
       resolve();
       return;
@@ -33,31 +34,31 @@ function App({
       return;
     }
     if (readerState.kind === "awaiting") {
-      if (readerState.phase === "chapter" && keyEvent.name === "escape") { dispatch({ type: "PickerBackedOut" }); return; }
-      if (keyEvent.name === "down") { dispatch({ type: "SuggestionMovedDown" }); return; }
-      if (keyEvent.name === "up") { dispatch({ type: "SuggestionMovedUp" }); return; }
-      if (keyEvent.name === "tab") { dispatch({ type: "SuggestionAccepted" }); return; }
+      if (readerState.phase === "chapter" && name === "escape") { dispatch({ type: "PickerBackedOut" }); return; }
+      if (name === "down") { dispatch({ type: "SuggestionMovedDown" }); return; }
+      if (name === "up") { dispatch({ type: "SuggestionMovedUp" }); return; }
+      if (name === "tab") { dispatch({ type: "SuggestionAccepted" }); return; }
       return;
     }
 
     if (readerState.kind === "loaded" && readerState.versePicker !== null) {
-      if (keyEvent.name === "up") { dispatch({ type: "VersePickerMovedUp" }); return; }
-      if (keyEvent.name === "down") { dispatch({ type: "VersePickerMovedDown" }); return; }
-      if (keyEvent.name === "left") { dispatch({ type: "VersePickerMovedLeft" }); return; }
-      if (keyEvent.name === "right") { dispatch({ type: "VersePickerMovedRight" }); return; }
-      if (keyEvent.name === "tab") { dispatch({ type: "VersePickerAccepted" }); return; }
-      if (keyEvent.name === "return") { dispatch({ type: "VersePickerAccepted" }); return; }
-      if (keyEvent.name === "escape") { dispatch({ type: "VersePickerCancelled" }); return; }
+      if (name === "up") { dispatch({ type: "VersePickerMovedUp" }); return; }
+      if (name === "down") { dispatch({ type: "VersePickerMovedDown" }); return; }
+      if (name === "left") { dispatch({ type: "VersePickerMovedLeft" }); return; }
+      if (name === "right") { dispatch({ type: "VersePickerMovedRight" }); return; }
+      if (name === "tab") { dispatch({ type: "VersePickerAccepted" }); return; }
+      if (name === "return") { dispatch({ type: "VersePickerAccepted" }); return; }
+      if (name === "escape") { dispatch({ type: "VersePickerCancelled" }); return; }
       return;
     }
 
-    if (keyEvent.name === "up") { dispatch({ type: "CursorMovedUp" }); return; }
-    if (keyEvent.name === "down") { dispatch({ type: "CursorMovedDown" }); return; }
-    if (keyEvent.name === "[") { dispatch({ type: "PageRetreated" }); return; }
-    if (keyEvent.name === "]") { dispatch({ type: "PageAdvanced" }); return; }
-    if (keyEvent.name === "n") { dispatch({ type: "ChapterAdvanced" }); return; }
-    if (keyEvent.name === "p") { dispatch({ type: "ChapterRetreated" }); return; }
-    if (keyEvent.name === "/") { dispatch({ type: "PaletteReopened" }); return; }
+    if (name === "up") { dispatch({ type: "CursorMovedUp" }); return; }
+    if (name === "down") { dispatch({ type: "CursorMovedDown" }); return; }
+    if (name === "[") { dispatch({ type: "PageRetreated" }); return; }
+    if (name === "]") { dispatch({ type: "PageAdvanced" }); return; }
+    if (name === "n") { dispatch({ type: "ChapterAdvanced" }); return; }
+    if (name === "p") { dispatch({ type: "ChapterRetreated" }); return; }
+    if (name === "/") { dispatch({ type: "PaletteReopened" }); return; }
   });
 
   if (phase === "welcome") {

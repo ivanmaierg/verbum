@@ -27,4 +27,13 @@ describe("chaptersForBook", () => {
   it("returns 0 for unknown key XYZ", () => {
     expect(chaptersForBook("XYZ")).toBe(0);
   });
+
+  it("is case-insensitive (lowercase gen still returns 50)", () => {
+    expect(chaptersForBook("gen")).toBe(50);
+  });
+
+  it("is case-insensitive (mixed-case JoH still returns 21)", () => {
+    expect(chaptersForBook("JoH")).toBe(0);
+    expect(chaptersForBook("jhn")).toBe(21);
+  });
 });
