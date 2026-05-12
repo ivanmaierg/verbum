@@ -92,7 +92,7 @@ function Body({ state, dispatch, frame, boxWidth }: BodyProps) {
           <input
             focused
             value={state.query}
-            onChange={(v) => dispatch({ type: "QueryTyped", query: v })}
+            onInput={(v) => dispatch({ type: "QueryTyped", query: v })}
             onSubmit={() => dispatch({ type: "QuerySubmitted" })}
           />
         </box>
