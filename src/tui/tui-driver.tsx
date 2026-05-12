@@ -32,7 +32,12 @@ function App({
       setPhase("reader");
       return;
     }
-    if (readerState.kind === "awaiting") return;
+    if (readerState.kind === "awaiting") {
+      if (keyEvent.name === "down") { dispatch({ type: "SuggestionMovedDown" }); return; }
+      if (keyEvent.name === "up") { dispatch({ type: "SuggestionMovedUp" }); return; }
+      if (keyEvent.name === "tab") { dispatch({ type: "SuggestionAccepted" }); return; }
+      return;
+    }
 
     if (keyEvent.name === "up") { dispatch({ type: "CursorMovedUp" }); return; }
     if (keyEvent.name === "down") { dispatch({ type: "CursorMovedDown" }); return; }

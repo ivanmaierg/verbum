@@ -101,7 +101,7 @@ describe("readerReducer", () => {
 
   describe("QuerySubmitted", () => {
     it("transitions awaiting → loading when query parses ok", () => {
-      const state: ReaderState = { kind: "awaiting", query: "john 3", parseError: null };
+      const state: ReaderState = { kind: "awaiting", query: "john 3", parseError: null, suggestions: [], selectedIndex: -1 };
       const next = dispatch(state, { type: "QuerySubmitted" });
       expect(next.kind).toBe("loading");
       if (next.kind !== "loading") return;
@@ -110,7 +110,7 @@ describe("readerReducer", () => {
     });
 
     it("stays awaiting with parseError when query is malformed", () => {
-      const state: ReaderState = { kind: "awaiting", query: "jhn 3x", parseError: null };
+      const state: ReaderState = { kind: "awaiting", query: "jhn 3x", parseError: null, suggestions: [], selectedIndex: -1 };
       const next = dispatch(state, { type: "QuerySubmitted" });
       expect(next.kind).toBe("awaiting");
       if (next.kind !== "awaiting") return;
@@ -119,7 +119,7 @@ describe("readerReducer", () => {
     });
 
     it("stays awaiting with parseError for empty query", () => {
-      const state: ReaderState = { kind: "awaiting", query: "", parseError: null };
+      const state: ReaderState = { kind: "awaiting", query: "", parseError: null, suggestions: [], selectedIndex: -1 };
       const next = dispatch(state, { type: "QuerySubmitted" });
       expect(next.kind).toBe("awaiting");
       if (next.kind !== "awaiting") return;

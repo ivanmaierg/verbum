@@ -62,10 +62,10 @@ function titleFor(state: ReaderState): string {
   }
 }
 
-function bottomTitleFor(state: ReaderState): string {
+export function bottomTitleFor(state: ReaderState): string {
   switch (state.kind) {
     case "awaiting":
-      return " Enter open  •  q quit ";
+      return " Tab complete  •  ↑↓ suggest  •  Enter open  •  q quit ";
     case "loading":
       return " loading…  •  q quit ";
     case "loaded":
@@ -98,6 +98,23 @@ function Body({ state, dispatch, frame, boxWidth }: BodyProps) {
         </box>
         {state.parseError !== null ? (
           <text>{`  ⚠ couldn't parse "${state.query}"`}</text>
+        ) : null}
+        {state.suggestions.length > 0 ? (
+          <box flexDirection="column" marginTop={1} marginLeft={2}>
+            {state.suggestions.map((s, i) => {
+              const selected = i === state.selectedIndex;
+              return (
+                <text key={s.alias}>
+                  <span fg={selected ? ACCENT_HEX : undefined}>
+                    {selected ? "▶ " : "  "}
+                  </span>
+                  <span fg={selected ? ACCENT_HEX : undefined}>{s.displayName}</span>
+                  {"  "}
+                  <span attributes={DIM}>{s.canonical}</span>
+                </text>
+              );
+            })}
+          </box>
         ) : null}
       </box>
     );
