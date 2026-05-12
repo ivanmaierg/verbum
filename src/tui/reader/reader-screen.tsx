@@ -11,7 +11,6 @@ import type { Dispatch } from "react";
 import type { Verse } from "@/domain/passage";
 
 const DIM = TextAttributes.DIM;
-const INVERSE = TextAttributes.INVERSE;
 
 type ReaderScreenProps = {
   state: ReaderState;
@@ -169,7 +168,7 @@ function LoadedBody({
             ) : (
               <span>{CONTINUATION_INDENT}</span>
             )}
-            <span attributes={focused ? INVERSE : undefined}>{line}</span>
+            <span fg={focused ? ACCENT_HEX : undefined}>{line}</span>
           </text>
         ));
         // Blank row between verses (not after the last) — matches the sketch's vertical rhythm.
