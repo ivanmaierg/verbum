@@ -71,7 +71,7 @@ export function WelcomeScreen({
       <text attributes={DIM}>{RIBBON_3}</text>
 
       <text>{" "}</text>
-      <text attributes={DIM}>{"  any key to start  •  / palette  •  ] next ch  •  [ prev ch  •  q quit"}</text>
+      <text attributes={DIM}>{"  any key to start  •  ↑↓ verse  •  [ ] page  •  n p chapter  •  / palette  •  q quit"}</text>
     </box>
   );
 }
