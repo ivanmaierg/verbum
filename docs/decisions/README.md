@@ -14,7 +14,8 @@ ADRs capture significant architectural decisions, the alternatives considered, a
 | [0006](0006-caching-strategy.md) | Caching strategy | accepted | 2026-05-09 |
 | [0007](0007-output-formatters.md) | Output formatters / presenter pattern | accepted | 2026-05-09 |
 | [0008](0008-storage-evolution.md) | Storage evolution: JSON now, SQLite at v4 | accepted | 2026-05-09 |
-| [0009](0009-language-portable-architecture.md) | Language-portable architecture (Go-port readiness) | accepted | 2026-05-09 |
+| [0009](0009-language-portable-architecture.md) | Language-portable architecture (Go-port readiness) | superseded by 0010 | 2026-05-09 |
+| [0010](0010-typescript-native-architecture.md) | TypeScript-native architecture (Go-port commitment dropped) | accepted | 2026-05-11 |
 
 ## Format
 
