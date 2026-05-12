@@ -30,22 +30,19 @@ export function ReaderScreen({ state, dispatch, repo }: ReaderScreenProps) {
     return (
       <box flexDirection="column">
         <text attributes={DIM}>{"╭───────────────────────────────────────╮"}</text>
-        <text>
-          <span attributes={DIM}>{"│ ▶ "}</span>
-          <input
-            focused
-            value={state.query}
-            onChange={(v) => dispatch({ type: "QueryTyped", query: v })}
-            onSubmit={() => dispatch({ type: "QuerySubmitted" })}
-          />
-          <span attributes={DIM}>{" │"}</span>
-        </text>
-        {state.parseError !== null && (
-          <text fg={"\x1b[31m"}>{`│ ⚠ couldn't parse "${state.query}"`.padEnd(41) + "│"}</text>
-        )}
+        <text attributes={DIM}>{"│  Type a reference, press Enter        │"}</text>
+        <input
+          focused
+          value={state.query}
+          onChange={(v) => dispatch({ type: "QueryTyped", query: v })}
+          onSubmit={() => dispatch({ type: "QuerySubmitted" })}
+        />
+        {state.parseError !== null ? (
+          <text>{`  ⚠ couldn't parse "${state.query}"`}</text>
+        ) : null}
         <text attributes={DIM}>{"╰───────────────────────────────────────╯"}</text>
         <text>{" "}</text>
-        <text attributes={DIM}>{"  Enter open  •  Esc cancel  •  q quit"}</text>
+        <text attributes={DIM}>{"  Enter open  •  / palette  •  q quit"}</text>
       </box>
     );
   }
