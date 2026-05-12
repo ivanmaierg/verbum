@@ -19,6 +19,8 @@ type ReaderScreenProps = {
   repo: BibleRepository;
 };
 
+const PAGE_MAX_WIDTH = 70;
+
 export function ReaderScreen({ state, dispatch, repo }: ReaderScreenProps) {
   usePassageFetch(state, dispatch, repo);
 
@@ -32,15 +34,20 @@ export function ReaderScreen({ state, dispatch, repo }: ReaderScreenProps) {
     return () => clearInterval(id);
   }, [state.kind]);
 
+  const { width: termWidth } = useTerminalDimensions();
+  const boxWidth = Math.min(PAGE_MAX_WIDTH, Math.max(40, termWidth - 4));
+
   return (
-    <box
-      border
-      borderStyle="single"
-      title={titleFor(state)}
-      bottomTitle={bottomTitleFor(state)}
-      flexGrow={1}
-    >
-      <Body state={state} dispatch={dispatch} frame={frame} />
+    <box flexDirection="column" alignItems="center" flexGrow={1} paddingTop={1}>
+      <box
+        border
+        borderStyle="single"
+        title={titleFor(state)}
+        bottomTitle={bottomTitleFor(state)}
+        width={boxWidth}
+      >
+        <Body state={state} dispatch={dispatch} frame={frame} boxWidth={boxWidth} />
+      </box>
     </box>
   );
 }
@@ -73,9 +80,10 @@ type BodyProps = {
   state: ReaderState;
   dispatch: Dispatch<ReaderAction>;
   frame: number;
+  boxWidth: number;
 };
 
-function Body({ state, dispatch, frame }: BodyProps) {
+function Body({ state, dispatch, frame, boxWidth }: BodyProps) {
   if (state.kind === "awaiting") {
     return (
       <box flexDirection="column">
@@ -115,39 +123,48 @@ function Body({ state, dispatch, frame }: BodyProps) {
 
   const { passage, cursorIndex, pageStartIndex } = state;
   const pageVerses = passage.verses.slice(pageStartIndex, pageStartIndex + VERSES_PER_PAGE);
-  return <LoadedBody pageVerses={pageVerses} cursorIndex={cursorIndex} pageStartIndex={pageStartIndex} />;
+  return (
+    <LoadedBody
+      pageVerses={pageVerses}
+      cursorIndex={cursorIndex}
+      pageStartIndex={pageStartIndex}
+      boxWidth={boxWidth}
+    />
+  );
 }
 
-const PREFIX_LEN = 6; // 1 (gutter) + 3 (padded number) + 2 (spaces)
+// Prefix layout matches docs/ui-sketches.md Reading view (line 122):
+//   "▶ 16 For God..." or "  16 For God..." — 5 chars before text, 5-space continuation.
+const PREFIX_LEN = 5;
 const CONTINUATION_INDENT = " ".repeat(PREFIX_LEN);
 
 function LoadedBody({
   pageVerses,
   cursorIndex,
   pageStartIndex,
+  boxWidth,
 }: {
   pageVerses: Verse[];
   cursorIndex: number;
   pageStartIndex: number;
+  boxWidth: number;
 }) {
-  // Subtract border (2) + prefix (6); guard against narrow terminals so we never wrap to 0.
-  const { width } = useTerminalDimensions();
-  const wrapWidth = Math.max(20, width - 2 - PREFIX_LEN);
+  const wrapWidth = Math.max(20, boxWidth - 2 - PREFIX_LEN);
 
   return (
-    <box flexDirection="column">
+    <box flexDirection="column" paddingTop={1} paddingBottom={1}>
       {pageVerses.flatMap((v, i) => {
         const idx = pageStartIndex + i;
         const focused = idx === cursorIndex;
         const lines = wordWrap(v.text, wrapWidth);
-        return lines.map((line, lineIdx) => (
+        const rows = lines.map((line, lineIdx) => (
           <text key={`${v.number}-${lineIdx}`}>
             {lineIdx === 0 ? (
               <>
                 <span fg={focused ? ACCENT_HEX : undefined} attributes={focused ? undefined : DIM}>
                   {focused ? "▶" : " "}
                 </span>
-                <span attributes={DIM}>{`${String(v.number).padStart(3)}  `}</span>
+                <span attributes={DIM}>{` ${String(v.number).padStart(2)} `}</span>
               </>
             ) : (
               <span>{CONTINUATION_INDENT}</span>
@@ -155,6 +172,11 @@ function LoadedBody({
             <span attributes={focused ? INVERSE : undefined}>{line}</span>
           </text>
         ));
+        // Blank row between verses (not after the last) — matches the sketch's vertical rhythm.
+        if (i < pageVerses.length - 1) {
+          rows.push(<text key={`gap-${v.number}`}>{" "}</text>);
+        }
+        return rows;
       })}
     </box>
   );
