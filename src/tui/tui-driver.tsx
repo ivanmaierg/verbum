@@ -32,18 +32,15 @@ function App({
       setPhase("reader");
       return;
     }
-    if (keyEvent.name === "]") {
-      dispatch({ type: "ChapterAdvanced" });
-      return;
-    }
-    if (keyEvent.name === "[") {
-      dispatch({ type: "ChapterRetreated" });
-      return;
-    }
-    if (keyEvent.name === "/") {
-      dispatch({ type: "PaletteReopened" });
-      return;
-    }
+    if (readerState.kind === "awaiting") return;
+
+    if (keyEvent.name === "up") { dispatch({ type: "CursorMovedUp" }); return; }
+    if (keyEvent.name === "down") { dispatch({ type: "CursorMovedDown" }); return; }
+    if (keyEvent.name === "[") { dispatch({ type: "PageRetreated" }); return; }
+    if (keyEvent.name === "]") { dispatch({ type: "PageAdvanced" }); return; }
+    if (keyEvent.name === "n") { dispatch({ type: "ChapterAdvanced" }); return; }
+    if (keyEvent.name === "p") { dispatch({ type: "ChapterRetreated" }); return; }
+    if (keyEvent.name === "/") { dispatch({ type: "PaletteReopened" }); return; }
   });
 
   if (phase === "welcome") {
