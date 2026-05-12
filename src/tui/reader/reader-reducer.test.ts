@@ -532,7 +532,7 @@ describe("readerReducer", () => {
   });
 
   describe("QueryTyped (chapter phase override)", () => {
-    it("always resets to book phase, clears bookChosen and chapters, recomputes suggestions", () => {
+    it("resets to book phase when the new query no longer starts with the chosen book name", () => {
       const state = makeAwaiting({
         phase: "chapter",
         bookChosen: { alias: "john", canonical: "JHN", displayName: "John" },
@@ -545,6 +545,39 @@ describe("readerReducer", () => {
       expect(next.bookChosen).toBeNull();
       expect(next.chapters).toEqual([]);
       expect(next.suggestions.length).toBeGreaterThan(0);
+    });
+
+    it("preserves chapter phase when the new query still has the chosen book prefix", () => {
+      // Why: OpenTUI's controlled <input> synthesizes onInput when value changes
+      // programmatically (e.g. after SuggestionAccepted rewrites query to "John ").
+      // Without this preservation the user would be kicked out of chapter mode
+      // immediately on every book pick.
+      const state = makeAwaiting({
+        phase: "chapter",
+        bookChosen: { alias: "john", canonical: "JHN", displayName: "John" },
+        chapters: [1, 2, 3, 4, 5],
+        selectedIndex: 0,
+        query: "John ",
+      });
+      const next = dispatch(state, { type: "QueryTyped", query: "John " });
+      if (next.kind !== "awaiting") throw new Error("expected awaiting");
+      expect(next.phase).toBe("chapter");
+      expect(next.bookChosen).not.toBeNull();
+      expect(next.chapters).toEqual([1, 2, 3, 4, 5]);
+      expect(next.selectedIndex).toBe(0);
+    });
+
+    it("preserves chapter phase case-insensitively", () => {
+      const state = makeAwaiting({
+        phase: "chapter",
+        bookChosen: { alias: "john", canonical: "JHN", displayName: "John" },
+        chapters: [1, 2, 3],
+        selectedIndex: 0,
+        query: "JOHN ",
+      });
+      const next = dispatch(state, { type: "QueryTyped", query: "JOHN 3" });
+      if (next.kind !== "awaiting") throw new Error("expected awaiting");
+      expect(next.phase).toBe("chapter");
     });
   });
 

@@ -41,10 +41,30 @@ export type ReaderAction =
   | { type: "PickerBackedOut" };
 
 const handlers = {
-  QueryTyped: (s: ReaderState, a: Extract<ReaderAction, { type: "QueryTyped" }>): ReaderState =>
-    s.kind === "awaiting"
-      ? { ...s, query: a.query, parseError: null, suggestions: suggestBooks(a.query), selectedIndex: -1, phase: "book", bookChosen: null, chapters: [] }
-      : s,
+  QueryTyped: (s: ReaderState, a: Extract<ReaderAction, { type: "QueryTyped" }>): ReaderState => {
+    if (s.kind !== "awaiting") return s;
+    // Stay in chapter phase if the new query still has the chosen book's display
+    // name as a prefix. Without this, OpenTUI's controlled <input> kicks us out
+    // of chapter mode the instant SuggestionAccepted programmatically rewrites
+    // the query, because the value-prop change synthesizes an onInput event.
+    if (
+      s.phase === "chapter" &&
+      s.bookChosen !== null &&
+      a.query.toLowerCase().startsWith(`${s.bookChosen.displayName.toLowerCase()} `)
+    ) {
+      return { ...s, query: a.query, parseError: null };
+    }
+    return {
+      ...s,
+      query: a.query,
+      parseError: null,
+      suggestions: suggestBooks(a.query),
+      selectedIndex: -1,
+      phase: "book",
+      bookChosen: null,
+      chapters: [],
+    };
+  },
 
   QuerySubmitted: (s: ReaderState, _a: Extract<ReaderAction, { type: "QuerySubmitted" }>): ReaderState => {
     if (s.kind !== "awaiting") return s;
