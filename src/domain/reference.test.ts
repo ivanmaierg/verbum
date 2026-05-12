@@ -58,8 +58,8 @@ describe("parseReference", () => {
     expect(result.error.kind).toBe("empty_input");
   });
 
-  it("returns malformed_chapter_verse when colon is missing", () => {
-    const result = parseReference("john 316");
+  it("returns malformed_chapter_verse for non-integer chapter token without colon", () => {
+    const result = parseReference("john 3abc");
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error.kind).toBe("malformed_chapter_verse");
@@ -67,6 +67,45 @@ describe("parseReference", () => {
 
   it("returns malformed_chapter_verse for zero chapter", () => {
     const result = parseReference("john 0:16");
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.kind).toBe("malformed_chapter_verse");
+  });
+
+  it("parses 'john 3' to whole-chapter ref", () => {
+    const result = parseReference("john 3");
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.book as string).toBe("JHN");
+    expect(result.value.chapter).toBe(3);
+    expect(result.value.verses).toEqual({ start: 1, end: Number.MAX_SAFE_INTEGER });
+  });
+
+  it("parses 'john 3 ' (trailing space) to whole-chapter ref", () => {
+    const result = parseReference("john 3 ");
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.chapter).toBe(3);
+    expect(result.value.verses).toEqual({ start: 1, end: Number.MAX_SAFE_INTEGER });
+  });
+
+  it("parses 'JOHN 3' case-insensitively to whole-chapter ref", () => {
+    const result = parseReference("JOHN 3");
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.book as string).toBe("JHN");
+    expect(result.value.chapter).toBe(3);
+  });
+
+  it("rejects 'jhn 3x' with malformed_chapter_verse", () => {
+    const result = parseReference("jhn 3x");
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.kind).toBe("malformed_chapter_verse");
+  });
+
+  it("rejects 'john 0' — chapter must be ≥1", () => {
+    const result = parseReference("john 0");
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error.kind).toBe("malformed_chapter_verse");

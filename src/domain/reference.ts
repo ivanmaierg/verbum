@@ -158,7 +158,7 @@ const BOOK_ALIASES: Record<string, string> = {
 };
 
 // parseReference — the single parsing entry point for user references.
-// Accepts only <book-alias> <chapter>:<verse> — no ranges, no whole-chapter (D4).
+// Accepts <book-alias> <chapter> or <book-alias> <chapter>:<verse>.
 // Returns a validated Reference or a ParseError — never throws (R1).
 export function parseReference(input: string): Result<Reference, ParseError> {
   const trimmed = input.trim();
@@ -194,12 +194,25 @@ export function parseReference(input: string): Result<Reference, ParseError> {
     return { ok: false, error: { kind: "unknown_book", input: rawBook } };
   }
 
-  // Parse <chapter>:<verse>.
+  // Parse <chapter>:<verse> or <chapter> (whole-chapter).
   const colonIdx = rest.indexOf(":");
+
   if (colonIdx === -1) {
+    // No colon: accept whole-chapter refs (<book> <chapter>).
+    const chapter = parseInt(rest, 10);
+    if (!Number.isInteger(chapter) || chapter < 1 || rest !== String(chapter)) {
+      return {
+        ok: false,
+        error: { kind: "malformed_chapter_verse", input: rest },
+      };
+    }
     return {
-      ok: false,
-      error: { kind: "malformed_chapter_verse", input: rest },
+      ok: true,
+      value: {
+        book: bookResult.value,
+        chapter,
+        verses: { start: 1, end: Number.MAX_SAFE_INTEGER },
+      },
     };
   }
 
