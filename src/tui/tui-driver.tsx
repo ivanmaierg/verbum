@@ -1,12 +1,16 @@
-import { useReducer } from "react";
+import { useReducer, useState } from "react";
 import { createCliRenderer } from "@opentui/core";
 import { createRoot, useKeyboard } from "@opentui/react";
 import { readerReducer, initialReaderState } from "./reader/reader-reducer";
 import { ReaderScreen } from "./reader/reader-screen";
+import { WelcomeScreen } from "./welcome/welcome-screen";
+import { initialWelcomeState } from "./welcome/welcome-reducer";
 import type { CliRenderer } from "@opentui/core";
 import type { BibleRepository } from "@/application/ports/bible-repository";
 
-function ReaderApp({
+type Phase = "welcome" | "reader";
+
+function App({
   renderer,
   resolve,
   repo,
@@ -15,12 +19,17 @@ function ReaderApp({
   resolve: () => void;
   repo: BibleRepository;
 }) {
-  const [state, dispatch] = useReducer(readerReducer, initialReaderState);
+  const [phase, setPhase] = useState<Phase>("welcome");
+  const [readerState, dispatch] = useReducer(readerReducer, initialReaderState);
 
   useKeyboard((keyEvent) => {
     if (keyEvent.name === "q" || keyEvent.name === "Q") {
       renderer.destroy();
       resolve();
+      return;
+    }
+    if (phase === "welcome") {
+      setPhase("reader");
       return;
     }
     if (keyEvent.name === "]") {
@@ -37,7 +46,10 @@ function ReaderApp({
     }
   });
 
-  return <ReaderScreen state={state} dispatch={dispatch} repo={repo} />;
+  if (phase === "welcome") {
+    return <WelcomeScreen state={initialWelcomeState} dispatch={() => {}} />;
+  }
+  return <ReaderScreen state={readerState} dispatch={dispatch} repo={repo} />;
 }
 
 // Resolves when the user quits. Does NOT call process.exit — that's the entry point's job.
@@ -75,7 +87,7 @@ export async function tuiDriver(repo: BibleRepository): Promise<void> {
     };
 
     createRoot(renderer).render(
-      <ReaderApp renderer={renderer} resolve={wrappedResolve} repo={repo} />,
+      <App renderer={renderer} resolve={wrappedResolve} repo={repo} />,
     );
   });
 }
