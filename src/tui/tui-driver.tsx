@@ -33,9 +33,21 @@ function App({
       return;
     }
     if (readerState.kind === "awaiting") {
+      if (readerState.phase === "chapter" && keyEvent.name === "escape") { dispatch({ type: "PickerBackedOut" }); return; }
       if (keyEvent.name === "down") { dispatch({ type: "SuggestionMovedDown" }); return; }
       if (keyEvent.name === "up") { dispatch({ type: "SuggestionMovedUp" }); return; }
       if (keyEvent.name === "tab") { dispatch({ type: "SuggestionAccepted" }); return; }
+      return;
+    }
+
+    if (readerState.kind === "loaded" && readerState.versePicker !== null) {
+      if (keyEvent.name === "up") { dispatch({ type: "VersePickerMovedUp" }); return; }
+      if (keyEvent.name === "down") { dispatch({ type: "VersePickerMovedDown" }); return; }
+      if (keyEvent.name === "left") { dispatch({ type: "VersePickerMovedLeft" }); return; }
+      if (keyEvent.name === "right") { dispatch({ type: "VersePickerMovedRight" }); return; }
+      if (keyEvent.name === "tab") { dispatch({ type: "VersePickerAccepted" }); return; }
+      if (keyEvent.name === "return") { dispatch({ type: "VersePickerAccepted" }); return; }
+      if (keyEvent.name === "escape") { dispatch({ type: "VersePickerCancelled" }); return; }
       return;
     }
 
