@@ -5,6 +5,7 @@ import type { BookSuggestion } from "@/domain/book-suggestions";
 import type { Passage } from "@/domain/passage";
 import type { RepoError } from "@/domain/errors";
 import type { Reference } from "@/domain/reference";
+import { chaptersForBook } from "@/domain/book-chapters";
 
 const johnRef: Reference = {
   book: "JHN" as import("@/domain/book-id").BookId,
@@ -34,7 +35,7 @@ function makeLoaded(
   cursorIndex: number,
   pageStartIndex: number,
 ): ReaderState {
-  return { kind: "loaded", passage, ref: johnRef, cursorIndex, pageStartIndex };
+  return { kind: "loaded", passage, ref: johnRef, cursorIndex, pageStartIndex, versePicker: null };
 }
 
 function dispatch(state: ReaderState, action: ReaderAction): ReaderState {
@@ -50,6 +51,9 @@ describe("readerReducer", () => {
         parseError: null,
         suggestions: [],
         selectedIndex: -1,
+        phase: "book",
+        chapters: [],
+        bookChosen: null,
       });
     });
   });
@@ -61,21 +65,41 @@ describe("readerReducer", () => {
   });
 
   describe("QueryTyped", () => {
-    it("updates query, clears parseError, recomputes suggestions, and resets selectedIndex when awaiting", () => {
+    it("updates query, clears parseError, recomputes suggestions, and auto-selects top match when awaiting", () => {
       const state: ReaderState = {
         kind: "awaiting",
         query: "",
         parseError: { kind: "empty_input" },
         suggestions: [],
         selectedIndex: 2,
+        phase: "book",
+        chapters: [],
+        bookChosen: null,
       };
       const next = dispatch(state, { type: "QueryTyped", query: "joh" });
       expect(next.kind).toBe("awaiting");
       if (next.kind !== "awaiting") return;
       expect(next.query).toBe("joh");
       expect(next.parseError).toBeNull();
-      expect(next.selectedIndex).toBe(-1);
+      expect(next.selectedIndex).toBe(0);
       expect(next.suggestions.length).toBeGreaterThan(0);
+    });
+
+    it("sets selectedIndex to -1 when query produces no suggestions", () => {
+      const state: ReaderState = {
+        kind: "awaiting",
+        query: "",
+        parseError: null,
+        suggestions: [],
+        selectedIndex: 0,
+        phase: "book",
+        chapters: [],
+        bookChosen: null,
+      };
+      const next = dispatch(state, { type: "QueryTyped", query: "zzzzz" });
+      if (next.kind !== "awaiting") throw new Error("expected awaiting");
+      expect(next.suggestions).toEqual([]);
+      expect(next.selectedIndex).toBe(-1);
     });
 
     it("populates suggestions matching the query", () => {
@@ -85,6 +109,9 @@ describe("readerReducer", () => {
         parseError: null,
         suggestions: [],
         selectedIndex: -1,
+        phase: "book",
+        chapters: [],
+        bookChosen: null,
       };
       const next = dispatch(state, { type: "QueryTyped", query: "joh" });
       if (next.kind !== "awaiting") return;
@@ -93,7 +120,7 @@ describe("readerReducer", () => {
     });
 
     it("is a no-op when not awaiting", () => {
-      const state: ReaderState = { kind: "loading", ref: johnRef };
+      const state: ReaderState = { kind: "loading", ref: johnRef, intent: "view" };
       const next = dispatch(state, { type: "QueryTyped", query: "genesis 1" });
       expect(next).toBe(state);
     });
@@ -101,7 +128,7 @@ describe("readerReducer", () => {
 
   describe("QuerySubmitted", () => {
     it("transitions awaiting → loading when query parses ok", () => {
-      const state: ReaderState = { kind: "awaiting", query: "john 3", parseError: null, suggestions: [], selectedIndex: -1 };
+      const state: ReaderState = { kind: "awaiting", query: "john 3", parseError: null, suggestions: [], selectedIndex: -1, phase: "book", chapters: [], bookChosen: null };
       const next = dispatch(state, { type: "QuerySubmitted" });
       expect(next.kind).toBe("loading");
       if (next.kind !== "loading") return;
@@ -110,7 +137,7 @@ describe("readerReducer", () => {
     });
 
     it("stays awaiting with parseError when query is malformed", () => {
-      const state: ReaderState = { kind: "awaiting", query: "jhn 3x", parseError: null, suggestions: [], selectedIndex: -1 };
+      const state: ReaderState = { kind: "awaiting", query: "jhn 3x", parseError: null, suggestions: [], selectedIndex: -1, phase: "book", chapters: [], bookChosen: null };
       const next = dispatch(state, { type: "QuerySubmitted" });
       expect(next.kind).toBe("awaiting");
       if (next.kind !== "awaiting") return;
@@ -119,7 +146,7 @@ describe("readerReducer", () => {
     });
 
     it("stays awaiting with parseError for empty query", () => {
-      const state: ReaderState = { kind: "awaiting", query: "", parseError: null, suggestions: [], selectedIndex: -1 };
+      const state: ReaderState = { kind: "awaiting", query: "", parseError: null, suggestions: [], selectedIndex: -1, phase: "book", chapters: [], bookChosen: null };
       const next = dispatch(state, { type: "QuerySubmitted" });
       expect(next.kind).toBe("awaiting");
       if (next.kind !== "awaiting") return;
@@ -127,7 +154,7 @@ describe("readerReducer", () => {
     });
 
     it("is a no-op when not awaiting", () => {
-      const state: ReaderState = { kind: "loading", ref: johnRef };
+      const state: ReaderState = { kind: "loading", ref: johnRef, intent: "view" };
       const next = dispatch(state, { type: "QuerySubmitted" });
       expect(next).toBe(state);
     });
@@ -135,7 +162,7 @@ describe("readerReducer", () => {
 
   describe("PassageFetched", () => {
     it("defaults cursorIndex to 0 when the ref's target verse is not in the passage", () => {
-      const state: ReaderState = { kind: "loading", ref: johnRef };
+      const state: ReaderState = { kind: "loading", ref: johnRef, intent: "view" };
       const next = dispatch(state, { type: "PassageFetched", passage: mockPassage });
       expect(next).toEqual({
         kind: "loaded",
@@ -143,6 +170,7 @@ describe("readerReducer", () => {
         ref: johnRef,
         cursorIndex: 0,
         pageStartIndex: 0,
+        versePicker: null,
       });
     });
 
@@ -150,7 +178,7 @@ describe("readerReducer", () => {
       const passage = makePassage(VERSES_PER_PAGE * 3);
       const targetVerse = VERSES_PER_PAGE + 1;
       const ref: Reference = { ...johnRef, verses: { start: targetVerse, end: targetVerse } };
-      const state: ReaderState = { kind: "loading", ref };
+      const state: ReaderState = { kind: "loading", ref, intent: "view" };
       const next = dispatch(state, { type: "PassageFetched", passage });
       if (next.kind !== "loaded") throw new Error("expected loaded state");
       expect(next.cursorIndex).toBe(targetVerse - 1);
@@ -161,7 +189,7 @@ describe("readerReducer", () => {
       const passage = makePassage(VERSES_PER_PAGE * 3);
       const targetVerse = VERSES_PER_PAGE * 2 + 1;
       const ref: Reference = { ...johnRef, verses: { start: targetVerse, end: targetVerse } };
-      const state: ReaderState = { kind: "loading", ref };
+      const state: ReaderState = { kind: "loading", ref, intent: "view" };
       const next = dispatch(state, { type: "PassageFetched", passage });
       if (next.kind !== "loaded") throw new Error("expected loaded state");
       expect(next.cursorIndex).toBe(targetVerse - 1);
@@ -177,7 +205,7 @@ describe("readerReducer", () => {
 
   describe("FetchFailed", () => {
     it("transitions loading → network-error", () => {
-      const state: ReaderState = { kind: "loading", ref: johnRef };
+      const state: ReaderState = { kind: "loading", ref: johnRef, intent: "view" };
       const next = dispatch(state, { type: "FetchFailed", ref: johnRef, reason: networkError });
       expect(next).toEqual({ kind: "network-error", ref: johnRef, reason: networkError });
     });
@@ -209,7 +237,7 @@ describe("readerReducer", () => {
     });
 
     it("is a no-op from loading", () => {
-      const state: ReaderState = { kind: "loading", ref: johnRef };
+      const state: ReaderState = { kind: "loading", ref: johnRef, intent: "view" };
       const next = dispatch(state, { type: "ChapterAdvanced" });
       expect(next).toBe(state);
     });
@@ -252,7 +280,7 @@ describe("readerReducer", () => {
     });
 
     it("is a no-op from loading", () => {
-      const state: ReaderState = { kind: "loading", ref: johnRef };
+      const state: ReaderState = { kind: "loading", ref: johnRef, intent: "view" };
       const next = dispatch(state, { type: "ChapterRetreated" });
       expect(next).toBe(state);
     });
@@ -268,6 +296,9 @@ describe("readerReducer", () => {
         parseError: null,
         suggestions: [],
         selectedIndex: -1,
+        phase: "book",
+        chapters: [],
+        bookChosen: null,
       });
     });
 
@@ -280,6 +311,9 @@ describe("readerReducer", () => {
         parseError: null,
         suggestions: [],
         selectedIndex: -1,
+        phase: "book",
+        chapters: [],
+        bookChosen: null,
       });
     });
 
@@ -289,7 +323,7 @@ describe("readerReducer", () => {
     });
 
     it("is a no-op from loading", () => {
-      const state: ReaderState = { kind: "loading", ref: johnRef };
+      const state: ReaderState = { kind: "loading", ref: johnRef, intent: "view" };
       const next = dispatch(state, { type: "PaletteReopened" });
       expect(next).toBe(state);
     });
@@ -304,8 +338,8 @@ describe("readerReducer", () => {
     ];
 
     const nonLoadedStates: ReaderState[] = [
-      { kind: "awaiting", query: "", parseError: null, suggestions: [], selectedIndex: -1 },
-      { kind: "loading", ref: johnRef },
+      { kind: "awaiting", query: "", parseError: null, suggestions: [], selectedIndex: -1, phase: "book", chapters: [], bookChosen: null },
+      { kind: "loading", ref: johnRef, intent: "view" },
       { kind: "network-error", ref: johnRef, reason: networkError },
     ];
 
@@ -410,6 +444,9 @@ describe("readerReducer", () => {
     parseError: null | { kind: string };
     suggestions: BookSuggestion[];
     selectedIndex: number;
+    phase: "book" | "chapter";
+    chapters: number[];
+    bookChosen: BookSuggestion | null;
   }> = {}): ReaderState {
     return {
       kind: "awaiting",
@@ -417,6 +454,9 @@ describe("readerReducer", () => {
       parseError: null,
       suggestions: [],
       selectedIndex: -1,
+      phase: "book",
+      chapters: [],
+      bookChosen: null,
       ...overrides,
     } as ReaderState;
   }
@@ -465,20 +505,459 @@ describe("readerReducer", () => {
     });
   });
 
-  describe("SuggestionAccepted", () => {
-    it("sets query to displayName + space, clears suggestions, resets selectedIndex", () => {
-      const state = makeAwaiting({ suggestions: mockSuggestions, selectedIndex: 1 });
+  describe("SuggestionAccepted (book phase)", () => {
+    it("transitions to chapter phase with bookChosen, chapters, selectedIndex 0", () => {
+      const state = makeAwaiting({ suggestions: mockSuggestions, selectedIndex: 0, phase: "book" });
       const next = dispatch(state, { type: "SuggestionAccepted" });
       if (next.kind !== "awaiting") throw new Error("expected awaiting");
-      expect(next.query).toBe("1 John ");
+      expect(next.phase).toBe("chapter");
+      expect(next.bookChosen?.canonical).toBe("JHN");
+      expect(next.chapters).toEqual(Array.from({ length: chaptersForBook("JHN") }, (_, i) => i + 1));
+      expect(next.selectedIndex).toBe(0);
       expect(next.suggestions).toEqual([]);
-      expect(next.selectedIndex).toBe(-1);
+      expect(next.query).toBe("John ");
     });
 
     it("is a no-op when selectedIndex is -1", () => {
-      const state = makeAwaiting({ suggestions: mockSuggestions, selectedIndex: -1 });
+      const state = makeAwaiting({ suggestions: mockSuggestions, selectedIndex: -1, phase: "book" });
       const next = dispatch(state, { type: "SuggestionAccepted" });
       expect(next).toBe(state);
+    });
+  });
+
+  describe("SuggestionAccepted (chapter phase)", () => {
+    it("transitions to loading/pick-verse with correct ref", () => {
+      const chapters = Array.from({ length: 21 }, (_, i) => i + 1);
+      const state = makeAwaiting({
+        phase: "chapter",
+        bookChosen: { alias: "john", canonical: "JHN", displayName: "John" },
+        chapters,
+        selectedIndex: 2,
+      });
+      const next = dispatch(state, { type: "SuggestionAccepted" });
+      expect(next.kind).toBe("loading");
+      if (next.kind !== "loading") return;
+      expect(next.ref.chapter).toBe(3);
+      expect(next.intent).toBe("pick-verse");
+    });
+
+    it("is a no-op when bookChosen is null", () => {
+      const state = makeAwaiting({ phase: "chapter", bookChosen: null, chapters: [1, 2, 3], selectedIndex: 0 });
+      const next = dispatch(state, { type: "SuggestionAccepted" });
+      expect(next).toBe(state);
+    });
+  });
+
+  describe("QueryTyped (chapter phase override)", () => {
+    it("resets to book phase when the new query no longer starts with the chosen book name", () => {
+      const state = makeAwaiting({
+        phase: "chapter",
+        bookChosen: { alias: "john", canonical: "JHN", displayName: "John" },
+        chapters: [1, 2, 3],
+        selectedIndex: 1,
+      });
+      const next = dispatch(state, { type: "QueryTyped", query: "j" });
+      if (next.kind !== "awaiting") throw new Error("expected awaiting");
+      expect(next.phase).toBe("book");
+      expect(next.bookChosen).toBeNull();
+      expect(next.chapters).toEqual([]);
+      expect(next.suggestions.length).toBeGreaterThan(0);
+    });
+
+    it("preserves chapter phase when the new query still has the chosen book prefix", () => {
+      // Why: OpenTUI's controlled <input> synthesizes onInput when value changes
+      // programmatically (e.g. after SuggestionAccepted rewrites query to "John ").
+      // Without this preservation the user would be kicked out of chapter mode
+      // immediately on every book pick.
+      const state = makeAwaiting({
+        phase: "chapter",
+        bookChosen: { alias: "john", canonical: "JHN", displayName: "John" },
+        chapters: [1, 2, 3, 4, 5],
+        selectedIndex: 0,
+        query: "John ",
+      });
+      const next = dispatch(state, { type: "QueryTyped", query: "John " });
+      if (next.kind !== "awaiting") throw new Error("expected awaiting");
+      expect(next.phase).toBe("chapter");
+      expect(next.bookChosen).not.toBeNull();
+      expect(next.chapters).toEqual([1, 2, 3, 4, 5]);
+      expect(next.selectedIndex).toBe(0);
+    });
+
+    it("preserves chapter phase case-insensitively", () => {
+      const state = makeAwaiting({
+        phase: "chapter",
+        bookChosen: { alias: "john", canonical: "JHN", displayName: "John" },
+        chapters: [1, 2, 3],
+        selectedIndex: 0,
+        query: "JOHN ",
+      });
+      const next = dispatch(state, { type: "QueryTyped", query: "JOHN 3" });
+      if (next.kind !== "awaiting") throw new Error("expected awaiting");
+      expect(next.phase).toBe("chapter");
+    });
+  });
+
+  describe("PassageFetched (intent branches)", () => {
+    it("opens versePicker when intent is pick-verse", () => {
+      const passage = makePassage(21);
+      const state: ReaderState = { kind: "loading", ref: johnRef, intent: "pick-verse" };
+      const next = dispatch(state, { type: "PassageFetched", passage });
+      if (next.kind !== "loaded") throw new Error("expected loaded");
+      expect(next.versePicker).toEqual({ selectedIndex: 0 });
+    });
+
+    it("sets versePicker null when intent is view", () => {
+      const passage = makePassage(21);
+      const state: ReaderState = { kind: "loading", ref: johnRef, intent: "view" };
+      const next = dispatch(state, { type: "PassageFetched", passage });
+      if (next.kind !== "loaded") throw new Error("expected loaded");
+      expect(next.versePicker).toBeNull();
+    });
+  });
+
+  describe("VersePickerMovedDown", () => {
+    it("increments selectedIndex by 10 (SCENARIO-09, normal)", () => {
+      const passage = makePassage(21);
+      const state = { ...makeLoaded(passage, 0, 0), versePicker: { selectedIndex: 5 } } as ReaderState;
+      const next = dispatch(state, { type: "VersePickerMovedDown" });
+      if (next.kind !== "loaded") throw new Error("expected loaded");
+      expect(next.versePicker?.selectedIndex).toBe(15);
+    });
+
+    it("clamps at passage.verses.length - 1 (SCENARIO-09, clamped)", () => {
+      const passage = makePassage(21);
+      const state = { ...makeLoaded(passage, 0, 0), versePicker: { selectedIndex: 15 } } as ReaderState;
+      const next = dispatch(state, { type: "VersePickerMovedDown" });
+      if (next.kind !== "loaded") throw new Error("expected loaded");
+      expect(next.versePicker?.selectedIndex).toBe(20);
+    });
+
+    it("is a no-op when versePicker is null", () => {
+      const state = makeLoaded(makePassage(10), 0, 0);
+      const next = dispatch(state, { type: "VersePickerMovedDown" });
+      expect(next).toBe(state);
+    });
+  });
+
+  describe("VersePickerMovedUp", () => {
+    it("decrements selectedIndex by 10, clamped to 0 (SCENARIO-10)", () => {
+      const passage = makePassage(21);
+      const state = { ...makeLoaded(passage, 0, 0), versePicker: { selectedIndex: 3 } } as ReaderState;
+      const next = dispatch(state, { type: "VersePickerMovedUp" });
+      if (next.kind !== "loaded") throw new Error("expected loaded");
+      expect(next.versePicker?.selectedIndex).toBe(0);
+    });
+
+    it("is a no-op when versePicker is null", () => {
+      const state = makeLoaded(makePassage(10), 0, 0);
+      const next = dispatch(state, { type: "VersePickerMovedUp" });
+      expect(next).toBe(state);
+    });
+  });
+
+  describe("VersePickerMovedRight", () => {
+    it("increments by 1, clamped to verses.length - 1 (SCENARIO-11)", () => {
+      const passage = makePassage(5);
+      const state = { ...makeLoaded(passage, 0, 0), versePicker: { selectedIndex: 4 } } as ReaderState;
+      const next = dispatch(state, { type: "VersePickerMovedRight" });
+      if (next.kind !== "loaded") throw new Error("expected loaded");
+      expect(next.versePicker?.selectedIndex).toBe(4);
+    });
+
+    it("is a no-op when versePicker is null", () => {
+      const state = makeLoaded(makePassage(5), 0, 0);
+      const next = dispatch(state, { type: "VersePickerMovedRight" });
+      expect(next).toBe(state);
+    });
+  });
+
+  describe("VersePickerMovedLeft", () => {
+    it("decrements by 1, clamped to 0 (SCENARIO-12)", () => {
+      const passage = makePassage(5);
+      const state = { ...makeLoaded(passage, 0, 0), versePicker: { selectedIndex: 0 } } as ReaderState;
+      const next = dispatch(state, { type: "VersePickerMovedLeft" });
+      if (next.kind !== "loaded") throw new Error("expected loaded");
+      expect(next.versePicker?.selectedIndex).toBe(0);
+    });
+
+    it("is a no-op when versePicker is null", () => {
+      const state = makeLoaded(makePassage(5), 0, 0);
+      const next = dispatch(state, { type: "VersePickerMovedLeft" });
+      expect(next).toBe(state);
+    });
+  });
+
+  describe("VersePickerAccepted", () => {
+    it("lands cursor at selectedIndex and closes overlay (SCENARIO-13)", () => {
+      const passage = makePassage(21);
+      const state = { ...makeLoaded(passage, 0, 0), versePicker: { selectedIndex: 15 } } as ReaderState;
+      const next = dispatch(state, { type: "VersePickerAccepted" });
+      if (next.kind !== "loaded") throw new Error("expected loaded");
+      expect(next.versePicker).toBeNull();
+      expect(next.cursorIndex).toBe(15);
+      expect(next.pageStartIndex).toBe(Math.floor(15 / VERSES_PER_PAGE) * VERSES_PER_PAGE);
+    });
+
+    it("is a no-op when versePicker is null", () => {
+      const state = makeLoaded(makePassage(21), 0, 0);
+      const next = dispatch(state, { type: "VersePickerAccepted" });
+      expect(next).toBe(state);
+    });
+  });
+
+  describe("VersePickerCancelled", () => {
+    it("closes overlay, leaves cursorIndex at 0 (SCENARIO-14)", () => {
+      const passage = makePassage(21);
+      const state = { ...makeLoaded(passage, 0, 0), versePicker: { selectedIndex: 10 } } as ReaderState;
+      const next = dispatch(state, { type: "VersePickerCancelled" });
+      if (next.kind !== "loaded") throw new Error("expected loaded");
+      expect(next.versePicker).toBeNull();
+      expect(next.cursorIndex).toBe(0);
+    });
+
+    it("is a no-op when versePicker is null", () => {
+      const state = makeLoaded(makePassage(21), 0, 0);
+      const next = dispatch(state, { type: "VersePickerCancelled" });
+      expect(next).toBe(state);
+    });
+  });
+
+  describe("PickerBackedOut", () => {
+    it("returns from chapter to book phase, restores suggestBooks (SCENARIO-15)", () => {
+      const state = makeAwaiting({
+        phase: "chapter",
+        query: "john ",
+        bookChosen: { alias: "john", canonical: "JHN", displayName: "John" },
+        chapters: [1, 2, 3],
+        selectedIndex: 1,
+      });
+      const next = dispatch(state, { type: "PickerBackedOut" });
+      if (next.kind !== "awaiting") throw new Error("expected awaiting");
+      expect(next.phase).toBe("book");
+      expect(next.bookChosen).toBeNull();
+      expect(next.chapters).toEqual([]);
+      expect(next.selectedIndex).toBe(-1);
+      expect(next.suggestions.length).toBeGreaterThan(0);
+    });
+
+    it("is a no-op when phase is book (SCENARIO-16)", () => {
+      const state = makeAwaiting({ phase: "book" });
+      const next = dispatch(state, { type: "PickerBackedOut" });
+      expect(next).toBe(state);
+    });
+  });
+
+  describe("QueryTyped (chapter phase digit suffix)", () => {
+    function chapterState(query: string, selectedIndex = 0): ReaderState {
+      return makeAwaiting({
+        phase: "chapter",
+        bookChosen: { alias: "john", canonical: "JHN", displayName: "John" },
+        chapters: Array.from({ length: 21 }, (_, i) => i + 1),
+        selectedIndex,
+        query: "John ",
+      });
+    }
+
+    it("sets selectedIndex from a single trailing digit", () => {
+      const next = dispatch(chapterState("John "), { type: "QueryTyped", query: "John 3" });
+      if (next.kind !== "awaiting") throw new Error("expected awaiting");
+      expect(next.phase).toBe("chapter");
+      expect(next.selectedIndex).toBe(2);
+    });
+
+    it("sets selectedIndex from a two-digit suffix (multi-digit support)", () => {
+      const next = dispatch(chapterState("John "), { type: "QueryTyped", query: "John 21" });
+      if (next.kind !== "awaiting") throw new Error("expected awaiting");
+      expect(next.selectedIndex).toBe(20);
+    });
+
+    it("keeps the previous selectedIndex when the digit is out of range", () => {
+      const next = dispatch(chapterState("John ", 4), { type: "QueryTyped", query: "John 99" });
+      if (next.kind !== "awaiting") throw new Error("expected awaiting");
+      expect(next.selectedIndex).toBe(4);
+    });
+
+    it("ignores the digit when n is 0 (chapters are 1-indexed)", () => {
+      const next = dispatch(chapterState("John ", 7), { type: "QueryTyped", query: "John 0" });
+      if (next.kind !== "awaiting") throw new Error("expected awaiting");
+      expect(next.selectedIndex).toBe(7);
+    });
+  });
+
+  describe("QuerySubmitted (chapter phase)", () => {
+    function chapterState(query: string, selectedIndex = 2): ReaderState {
+      return makeAwaiting({
+        phase: "chapter",
+        bookChosen: { alias: "john", canonical: "JHN", displayName: "John" },
+        chapters: Array.from({ length: 21 }, (_, i) => i + 1),
+        selectedIndex,
+        query,
+      });
+    }
+
+    it("picks the highlighted chapter with pick-verse intent when query has no colon", () => {
+      const next = dispatch(chapterState("John 3", 2), { type: "QuerySubmitted" });
+      expect(next.kind).toBe("loading");
+      if (next.kind !== "loading") return;
+      expect(next.ref.chapter).toBe(3);
+      expect(next.intent).toBe("pick-verse");
+    });
+
+    it("uses parseReference (view intent) when the query contains a colon", () => {
+      const next = dispatch(chapterState("John 3:16", 2), { type: "QuerySubmitted" });
+      expect(next.kind).toBe("loading");
+      if (next.kind !== "loading") return;
+      expect(next.ref.chapter).toBe(3);
+      expect(next.ref.verses).toEqual({ start: 16, end: 16 });
+      expect(next.intent).toBe("view");
+    });
+
+    it("is a no-op when selectedIndex is -1 and no colon present", () => {
+      const state = chapterState("John ", -1);
+      const next = dispatch(state, { type: "QuerySubmitted" });
+      expect(next).toBe(state);
+    });
+  });
+
+  describe("QuerySubmitted (book phase fallback to suggestion)", () => {
+    it("regression: typing 'john' then Enter enters chapter phase for John", () => {
+      let state: ReaderState = initialReaderState;
+      state = dispatch(state, { type: "QueryTyped", query: "john" });
+      if (state.kind !== "awaiting") throw new Error("expected awaiting");
+      expect(state.selectedIndex).toBe(0);
+      expect(state.suggestions[0]?.displayName).toBe("John");
+
+      const next = dispatch(state, { type: "QuerySubmitted" });
+      if (next.kind !== "awaiting") throw new Error("expected awaiting after enter");
+      expect(next.phase).toBe("chapter");
+      expect(next.bookChosen?.canonical).toBe("JHN");
+      expect(next.query).toBe("John ");
+      expect(next.selectedIndex).toBe(0);
+    });
+
+    it("case-insensitively: typing 'JOHN' then Enter picks John", () => {
+      let state: ReaderState = initialReaderState;
+      state = dispatch(state, { type: "QueryTyped", query: "JOHN" });
+      const next = dispatch(state, { type: "QuerySubmitted" });
+      if (next.kind !== "awaiting") throw new Error("expected awaiting");
+      expect(next.phase).toBe("chapter");
+      expect(next.bookChosen?.canonical).toBe("JHN");
+    });
+
+    it("falls through to parseError when neither parse succeeds nor a suggestion is available", () => {
+      const state: ReaderState = makeAwaiting({ query: "zzz", suggestions: [], selectedIndex: -1 });
+      const next = dispatch(state, { type: "QuerySubmitted" });
+      if (next.kind !== "awaiting") throw new Error("expected awaiting");
+      expect(next.parseError).not.toBeNull();
+    });
+  });
+
+  describe("ChapterGridMovedDown", () => {
+    function chapterState(selectedIndex: number, total = 21): ReaderState {
+      return makeAwaiting({
+        phase: "chapter",
+        bookChosen: { alias: "john", canonical: "JHN", displayName: "John" },
+        chapters: Array.from({ length: total }, (_, i) => i + 1),
+        selectedIndex,
+        query: "John ",
+      });
+    }
+
+    it("adds 10 (one row) to selectedIndex", () => {
+      const next = dispatch(chapterState(2), { type: "ChapterGridMovedDown" });
+      if (next.kind !== "awaiting") throw new Error("expected awaiting");
+      expect(next.selectedIndex).toBe(12);
+    });
+
+    it("clamps at chapters.length - 1", () => {
+      const next = dispatch(chapterState(18, 21), { type: "ChapterGridMovedDown" });
+      if (next.kind !== "awaiting") throw new Error("expected awaiting");
+      expect(next.selectedIndex).toBe(20);
+    });
+
+    it("is a no-op when not in chapter phase", () => {
+      const state = makeAwaiting({ phase: "book" });
+      const next = dispatch(state, { type: "ChapterGridMovedDown" });
+      expect(next).toBe(state);
+    });
+
+    it("is a no-op when chapters is empty", () => {
+      const state = makeAwaiting({ phase: "chapter", chapters: [], selectedIndex: 0 });
+      const next = dispatch(state, { type: "ChapterGridMovedDown" });
+      expect(next).toBe(state);
+    });
+  });
+
+  describe("ChapterGridMovedUp", () => {
+    function chapterState(selectedIndex: number): ReaderState {
+      return makeAwaiting({
+        phase: "chapter",
+        bookChosen: { alias: "john", canonical: "JHN", displayName: "John" },
+        chapters: Array.from({ length: 21 }, (_, i) => i + 1),
+        selectedIndex,
+        query: "John ",
+      });
+    }
+
+    it("subtracts 10 (one row) from selectedIndex", () => {
+      const next = dispatch(chapterState(15), { type: "ChapterGridMovedUp" });
+      if (next.kind !== "awaiting") throw new Error("expected awaiting");
+      expect(next.selectedIndex).toBe(5);
+    });
+
+    it("clamps at 0", () => {
+      const next = dispatch(chapterState(5), { type: "ChapterGridMovedUp" });
+      if (next.kind !== "awaiting") throw new Error("expected awaiting");
+      expect(next.selectedIndex).toBe(0);
+    });
+  });
+
+  describe("ChapterGridMovedRight", () => {
+    function chapterState(selectedIndex: number): ReaderState {
+      return makeAwaiting({
+        phase: "chapter",
+        bookChosen: { alias: "john", canonical: "JHN", displayName: "John" },
+        chapters: Array.from({ length: 21 }, (_, i) => i + 1),
+        selectedIndex,
+        query: "John ",
+      });
+    }
+
+    it("adds 1 to selectedIndex", () => {
+      const next = dispatch(chapterState(0), { type: "ChapterGridMovedRight" });
+      if (next.kind !== "awaiting") throw new Error("expected awaiting");
+      expect(next.selectedIndex).toBe(1);
+    });
+
+    it("clamps at chapters.length - 1", () => {
+      const next = dispatch(chapterState(20), { type: "ChapterGridMovedRight" });
+      if (next.kind !== "awaiting") throw new Error("expected awaiting");
+      expect(next.selectedIndex).toBe(20);
+    });
+  });
+
+  describe("ChapterGridMovedLeft", () => {
+    function chapterState(selectedIndex: number): ReaderState {
+      return makeAwaiting({
+        phase: "chapter",
+        bookChosen: { alias: "john", canonical: "JHN", displayName: "John" },
+        chapters: Array.from({ length: 21 }, (_, i) => i + 1),
+        selectedIndex,
+        query: "John ",
+      });
+    }
+
+    it("subtracts 1 from selectedIndex", () => {
+      const next = dispatch(chapterState(3), { type: "ChapterGridMovedLeft" });
+      if (next.kind !== "awaiting") throw new Error("expected awaiting");
+      expect(next.selectedIndex).toBe(2);
+    });
+
+    it("clamps at 0", () => {
+      const next = dispatch(chapterState(0), { type: "ChapterGridMovedLeft" });
+      if (next.kind !== "awaiting") throw new Error("expected awaiting");
+      expect(next.selectedIndex).toBe(0);
     });
   });
 });

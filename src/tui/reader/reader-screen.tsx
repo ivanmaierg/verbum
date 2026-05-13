@@ -63,16 +63,22 @@ function titleFor(state: ReaderState): string {
 }
 
 export function bottomTitleFor(state: ReaderState): string {
-  switch (state.kind) {
-    case "awaiting":
-      return " Tab complete  •  ↑↓ suggest  •  Enter open  •  q quit ";
-    case "loading":
-      return " loading…  •  q quit ";
-    case "loaded":
-      return " ↑↓ verse  •  [ ] page  •  n p chapter  •  / palette  •  q quit ";
-    case "network-error":
-      return " / palette  •  q quit ";
+  if (state.kind === "awaiting") {
+    if (state.phase === "chapter") {
+      return ` Pick a chapter — ${state.bookChosen?.displayName ?? ""} `;
+    }
+    return " Tab complete  •  ↑↓ suggest  •  Enter open  •  q quit ";
   }
+  if (state.kind === "loading") {
+    return " loading…  •  q quit ";
+  }
+  if (state.kind === "loaded") {
+    if (state.versePicker !== null) {
+      return " Pick a verse  •  ↑↓ row  •  ←→ cell  •  Tab accept  •  Esc cancel ";
+    }
+    return " ↑↓ verse  •  [ ] page  •  n p chapter  •  / palette  •  q quit ";
+  }
+  return " / palette  •  q quit ";
 }
 
 type BodyProps = {
@@ -99,7 +105,12 @@ function Body({ state, dispatch, frame, boxWidth }: BodyProps) {
         {state.parseError !== null ? (
           <text>{`  ⚠ couldn't parse "${state.query}"`}</text>
         ) : null}
-        {state.suggestions.length > 0 ? (
+        {state.phase === "chapter" ? (
+          <NumberGrid
+            items={state.chapters}
+            selectedIndex={state.selectedIndex}
+          />
+        ) : state.suggestions.length > 0 ? (
           <box flexDirection="column" marginTop={1} marginLeft={2}>
             {state.suggestions.map((s, i) => {
               const selected = i === state.selectedIndex;
@@ -137,7 +148,19 @@ function Body({ state, dispatch, frame, boxWidth }: BodyProps) {
     );
   }
 
-  const { passage, cursorIndex, pageStartIndex } = state;
+  const { passage, cursorIndex, pageStartIndex, versePicker } = state;
+
+  if (versePicker !== null) {
+    return (
+      <box flexDirection="column">
+        <NumberGrid
+          items={Array.from({ length: passage.verses.length }, (_, i) => i + 1)}
+          selectedIndex={versePicker.selectedIndex}
+        />
+      </box>
+    );
+  }
+
   const pageVerses = passage.verses.slice(pageStartIndex, pageStartIndex + VERSES_PER_PAGE);
   return (
     <LoadedBody
@@ -146,6 +169,34 @@ function Body({ state, dispatch, frame, boxWidth }: BodyProps) {
       pageStartIndex={pageStartIndex}
       boxWidth={boxWidth}
     />
+  );
+}
+
+function NumberGrid({ items, selectedIndex }: { items: number[]; selectedIndex: number }) {
+  const COLS = 10;
+  const rows: number[][] = [];
+  for (let i = 0; i < items.length; i += COLS) {
+    rows.push(items.slice(i, i + COLS));
+  }
+  const colWidth = String(items[items.length - 1] ?? 0).length + 1;
+
+  return (
+    <box flexDirection="column" marginTop={1} marginLeft={2}>
+      {rows.map((row, rowIdx) => (
+        <text key={rowIdx}>
+          {row.map((num, colIdx) => {
+            const idx = rowIdx * COLS + colIdx;
+            const selected = idx === selectedIndex;
+            const label = String(num).padEnd(colWidth);
+            return (
+              <span key={num} fg={selected ? ACCENT_HEX : undefined}>
+                {selected ? `▶${label}` : ` ${label}`}
+              </span>
+            );
+          })}
+        </text>
+      ))}
+    </box>
   );
 }
 

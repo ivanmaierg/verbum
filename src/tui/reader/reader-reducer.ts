@@ -1,5 +1,7 @@
 import { parseReference } from "@/domain/reference";
 import { suggestBooks } from "@/domain/book-suggestions";
+import { chaptersForBook } from "@/domain/book-chapters";
+import { bookIdFromCanonical } from "@/domain/book-id";
 import type { BookSuggestion } from "@/domain/book-suggestions";
 import type { Reference } from "@/domain/reference";
 import type { ParseError, RepoError } from "@/domain/errors";
@@ -8,9 +10,9 @@ import type { Passage } from "@/domain/passage";
 export const VERSES_PER_PAGE = 15;
 
 export type ReaderState =
-  | { kind: "awaiting"; query: string; parseError: ParseError | null; suggestions: BookSuggestion[]; selectedIndex: number }
-  | { kind: "loading"; ref: Reference }
-  | { kind: "loaded"; passage: Passage; ref: Reference; cursorIndex: number; pageStartIndex: number }
+  | { kind: "awaiting"; query: string; parseError: ParseError | null; suggestions: BookSuggestion[]; selectedIndex: number; phase: "book" | "chapter"; chapters: number[]; bookChosen: BookSuggestion | null }
+  | { kind: "loading"; ref: Reference; intent: "view" | "pick-verse" }
+  | { kind: "loaded"; passage: Passage; ref: Reference; cursorIndex: number; pageStartIndex: number; versePicker: { selectedIndex: number } | null }
   | { kind: "network-error"; ref: Reference; reason: RepoError };
 
 export type ReaderAction =
@@ -27,20 +29,89 @@ export type ReaderAction =
   | { type: "PageRetreated" }
   | { type: "SuggestionMovedUp" }
   | { type: "SuggestionMovedDown" }
-  | { type: "SuggestionAccepted" };
+  | { type: "SuggestionAccepted" }
+  | { type: "BookChosen" }
+  | { type: "ChapterChosen" }
+  | { type: "VersePickerMovedUp" }
+  | { type: "VersePickerMovedDown" }
+  | { type: "VersePickerMovedLeft" }
+  | { type: "VersePickerMovedRight" }
+  | { type: "VersePickerAccepted" }
+  | { type: "VersePickerCancelled" }
+  | { type: "PickerBackedOut" }
+  | { type: "ChapterGridMovedUp" }
+  | { type: "ChapterGridMovedDown" }
+  | { type: "ChapterGridMovedLeft" }
+  | { type: "ChapterGridMovedRight" };
 
 const handlers = {
-  QueryTyped: (s: ReaderState, a: Extract<ReaderAction, { type: "QueryTyped" }>): ReaderState =>
-    s.kind === "awaiting"
-      ? { ...s, query: a.query, parseError: null, suggestions: suggestBooks(a.query), selectedIndex: -1 }
-      : s,
+  QueryTyped: (s: ReaderState, a: Extract<ReaderAction, { type: "QueryTyped" }>): ReaderState => {
+    if (s.kind !== "awaiting") return s;
+    // Stay in chapter phase if the new query still has the chosen book's display
+    // name as a prefix. Without this, OpenTUI's controlled <input> kicks us out
+    // of chapter mode the instant SuggestionAccepted programmatically rewrites
+    // the query, because the value-prop change synthesizes an onInput event.
+    if (
+      s.phase === "chapter" &&
+      s.bookChosen !== null &&
+      a.query.toLowerCase().startsWith(`${s.bookChosen.displayName.toLowerCase()} `)
+    ) {
+      // Decode trailing digit suffix → grid selection. Multi-digit naturally works:
+      // "John 1" highlights chapter 1, "John 10" highlights chapter 10.
+      const suffix = a.query.slice(s.bookChosen.displayName.length + 1);
+      const digitMatch = /^(\d+)/.exec(suffix);
+      let selectedIndex = s.selectedIndex;
+      if (digitMatch) {
+        const n = parseInt(digitMatch[1], 10);
+        if (n >= 1 && n <= s.chapters.length) selectedIndex = n - 1;
+      }
+      return { ...s, query: a.query, parseError: null, selectedIndex };
+    }
+    // Book phase: re-suggest and auto-highlight the top match so Tab/Enter
+    // accept the obvious choice without arrow-down first (fzf-style).
+    const suggestions = suggestBooks(a.query);
+    return {
+      ...s,
+      query: a.query,
+      parseError: null,
+      suggestions,
+      selectedIndex: suggestions.length > 0 ? 0 : -1,
+      phase: "book",
+      bookChosen: null,
+      chapters: [],
+    };
+  },
 
   QuerySubmitted: (s: ReaderState, _a: Extract<ReaderAction, { type: "QuerySubmitted" }>): ReaderState => {
     if (s.kind !== "awaiting") return s;
+    // Chapter phase: Enter commits the highlighted chapter into the verse picker,
+    // UNLESS the user typed a colon — in which case they want a direct ref.
+    if (s.phase === "chapter" && s.bookChosen !== null) {
+      if (s.query.includes(":")) {
+        const result = parseReference(s.query);
+        return result.ok
+          ? { kind: "loading", ref: result.value, intent: "view" }
+          : { ...s, parseError: result.error };
+      }
+      if (s.selectedIndex < 0) return s;
+      const chapter = s.chapters[s.selectedIndex];
+      return {
+        kind: "loading",
+        ref: { book: bookIdFromCanonical(s.bookChosen.canonical), chapter, verses: { start: 1, end: 1 } },
+        intent: "pick-verse",
+      };
+    }
+    // Book phase: try parseReference; on failure, fall back to picking the
+    // highlighted suggestion so "john" + Enter enters chapter phase for John.
     const result = parseReference(s.query);
-    return result.ok
-      ? { kind: "loading", ref: result.value }
-      : { ...s, parseError: result.error };
+    if (result.ok) return { kind: "loading", ref: result.value, intent: "view" };
+    if (s.suggestions.length > 0 && s.selectedIndex >= 0) {
+      const chosen = s.suggestions[s.selectedIndex];
+      const n = chaptersForBook(chosen.canonical);
+      const chapters = Array.from({ length: n }, (_, i) => i + 1);
+      return { ...s, phase: "chapter", bookChosen: chosen, chapters, selectedIndex: 0, suggestions: [], query: `${chosen.displayName} ` };
+    }
+    return { ...s, parseError: result.error };
   },
 
   PassageFetched: (s: ReaderState, a: Extract<ReaderAction, { type: "PassageFetched" }>): ReaderState => {
@@ -49,7 +120,8 @@ const handlers = {
     const foundIndex = a.passage.verses.findIndex((v) => v.number === targetVerse);
     const cursorIndex = foundIndex >= 0 ? foundIndex : 0;
     const pageStartIndex = Math.floor(cursorIndex / VERSES_PER_PAGE) * VERSES_PER_PAGE;
-    return { kind: "loaded", passage: a.passage, ref: s.ref, cursorIndex, pageStartIndex };
+    const versePicker = s.intent === "pick-verse" ? { selectedIndex: 0 } : null;
+    return { kind: "loaded", passage: a.passage, ref: s.ref, cursorIndex, pageStartIndex, versePicker };
   },
 
   FetchFailed: (s: ReaderState, a: Extract<ReaderAction, { type: "FetchFailed" }>): ReaderState =>
@@ -59,18 +131,18 @@ const handlers = {
 
   ChapterAdvanced: (s: ReaderState, _a: Extract<ReaderAction, { type: "ChapterAdvanced" }>): ReaderState =>
     s.kind === "loaded"
-      ? { kind: "loading", ref: { ...s.ref, chapter: s.ref.chapter + 1, verses: { start: 1, end: 1 } } }
+      ? { kind: "loading", ref: { ...s.ref, chapter: s.ref.chapter + 1, verses: { start: 1, end: 1 } }, intent: "view" }
       : s,
 
   ChapterRetreated: (s: ReaderState, _a: Extract<ReaderAction, { type: "ChapterRetreated" }>): ReaderState => {
     if (s.kind !== "loaded") return s;
     if (s.ref.chapter <= 1) return s;
-    return { kind: "loading", ref: { ...s.ref, chapter: s.ref.chapter - 1, verses: { start: 1, end: 1 } } };
+    return { kind: "loading", ref: { ...s.ref, chapter: s.ref.chapter - 1, verses: { start: 1, end: 1 } }, intent: "view" };
   },
 
   PaletteReopened: (s: ReaderState, _a: Extract<ReaderAction, { type: "PaletteReopened" }>): ReaderState =>
     s.kind === "loaded" || s.kind === "network-error"
-      ? { kind: "awaiting", query: "", parseError: null, suggestions: [], selectedIndex: -1 }
+      ? { kind: "awaiting", query: "", parseError: null, suggestions: [], selectedIndex: -1, phase: "book", chapters: [], bookChosen: null }
       : s,
 
   CursorMovedDown: (s: ReaderState, _a: Extract<ReaderAction, { type: "CursorMovedDown" }>): ReaderState => {
@@ -124,8 +196,99 @@ const handlers = {
 
   SuggestionAccepted: (s: ReaderState, _a: Extract<ReaderAction, { type: "SuggestionAccepted" }>): ReaderState => {
     if (s.kind !== "awaiting" || s.selectedIndex < 0) return s;
+    if (s.phase === "book") {
+      const chosen = s.suggestions[s.selectedIndex];
+      const n = chaptersForBook(chosen.canonical);
+      const chapters = Array.from({ length: n }, (_, i) => i + 1);
+      return { ...s, phase: "chapter", bookChosen: chosen, chapters, selectedIndex: 0, suggestions: [], query: `${chosen.displayName} ` };
+    }
+    if (s.phase === "chapter") {
+      if (s.bookChosen === null) return s;
+      const chapter = s.chapters[s.selectedIndex];
+      return {
+        kind: "loading",
+        ref: { book: bookIdFromCanonical(s.bookChosen.canonical), chapter, verses: { start: 1, end: 1 } },
+        intent: "pick-verse",
+      };
+    }
+    return s;
+  },
+
+  BookChosen: (s: ReaderState, _a: Extract<ReaderAction, { type: "BookChosen" }>): ReaderState => {
+    if (s.kind !== "awaiting" || s.phase !== "book" || s.selectedIndex < 0) return s;
     const chosen = s.suggestions[s.selectedIndex];
-    return { ...s, query: `${chosen.displayName} `, suggestions: [], selectedIndex: -1 };
+    const n = chaptersForBook(chosen.canonical);
+    const chapters = Array.from({ length: n }, (_, i) => i + 1);
+    return { ...s, phase: "chapter", bookChosen: chosen, chapters, selectedIndex: 0, suggestions: [], query: `${chosen.displayName} ` };
+  },
+
+  ChapterChosen: (s: ReaderState, _a: Extract<ReaderAction, { type: "ChapterChosen" }>): ReaderState => {
+    if (s.kind !== "awaiting" || s.phase !== "chapter" || s.bookChosen === null || s.selectedIndex < 0) return s;
+    const chapter = s.chapters[s.selectedIndex];
+    return {
+      kind: "loading",
+      ref: { book: bookIdFromCanonical(s.bookChosen.canonical), chapter, verses: { start: 1, end: 1 } },
+      intent: "pick-verse",
+    };
+  },
+
+  VersePickerMovedDown: (s: ReaderState, _a: Extract<ReaderAction, { type: "VersePickerMovedDown" }>): ReaderState => {
+    if (s.kind !== "loaded" || s.versePicker === null) return s;
+    const max = s.passage.verses.length - 1;
+    return { ...s, versePicker: { selectedIndex: Math.min(s.versePicker.selectedIndex + 10, max) } };
+  },
+
+  VersePickerMovedUp: (s: ReaderState, _a: Extract<ReaderAction, { type: "VersePickerMovedUp" }>): ReaderState => {
+    if (s.kind !== "loaded" || s.versePicker === null) return s;
+    return { ...s, versePicker: { selectedIndex: Math.max(s.versePicker.selectedIndex - 10, 0) } };
+  },
+
+  VersePickerMovedRight: (s: ReaderState, _a: Extract<ReaderAction, { type: "VersePickerMovedRight" }>): ReaderState => {
+    if (s.kind !== "loaded" || s.versePicker === null) return s;
+    const max = s.passage.verses.length - 1;
+    return { ...s, versePicker: { selectedIndex: Math.min(s.versePicker.selectedIndex + 1, max) } };
+  },
+
+  VersePickerMovedLeft: (s: ReaderState, _a: Extract<ReaderAction, { type: "VersePickerMovedLeft" }>): ReaderState => {
+    if (s.kind !== "loaded" || s.versePicker === null) return s;
+    return { ...s, versePicker: { selectedIndex: Math.max(s.versePicker.selectedIndex - 1, 0) } };
+  },
+
+  VersePickerAccepted: (s: ReaderState, _a: Extract<ReaderAction, { type: "VersePickerAccepted" }>): ReaderState => {
+    if (s.kind !== "loaded" || s.versePicker === null) return s;
+    const cursorIndex = s.versePicker.selectedIndex;
+    const pageStartIndex = Math.floor(cursorIndex / VERSES_PER_PAGE) * VERSES_PER_PAGE;
+    return { ...s, cursorIndex, pageStartIndex, versePicker: null };
+  },
+
+  VersePickerCancelled: (s: ReaderState, _a: Extract<ReaderAction, { type: "VersePickerCancelled" }>): ReaderState => {
+    if (s.kind !== "loaded" || s.versePicker === null) return s;
+    return { ...s, versePicker: null };
+  },
+
+  PickerBackedOut: (s: ReaderState, _a: Extract<ReaderAction, { type: "PickerBackedOut" }>): ReaderState => {
+    if (s.kind !== "awaiting" || s.phase !== "chapter") return s;
+    return { ...s, phase: "book", bookChosen: null, chapters: [], selectedIndex: -1, suggestions: suggestBooks(s.query) };
+  },
+
+  ChapterGridMovedUp: (s: ReaderState, _a: Extract<ReaderAction, { type: "ChapterGridMovedUp" }>): ReaderState => {
+    if (s.kind !== "awaiting" || s.phase !== "chapter" || s.chapters.length === 0) return s;
+    return { ...s, selectedIndex: Math.max(s.selectedIndex - 10, 0) };
+  },
+
+  ChapterGridMovedDown: (s: ReaderState, _a: Extract<ReaderAction, { type: "ChapterGridMovedDown" }>): ReaderState => {
+    if (s.kind !== "awaiting" || s.phase !== "chapter" || s.chapters.length === 0) return s;
+    return { ...s, selectedIndex: Math.min(s.selectedIndex + 10, s.chapters.length - 1) };
+  },
+
+  ChapterGridMovedLeft: (s: ReaderState, _a: Extract<ReaderAction, { type: "ChapterGridMovedLeft" }>): ReaderState => {
+    if (s.kind !== "awaiting" || s.phase !== "chapter" || s.chapters.length === 0) return s;
+    return { ...s, selectedIndex: Math.max(s.selectedIndex - 1, 0) };
+  },
+
+  ChapterGridMovedRight: (s: ReaderState, _a: Extract<ReaderAction, { type: "ChapterGridMovedRight" }>): ReaderState => {
+    if (s.kind !== "awaiting" || s.phase !== "chapter" || s.chapters.length === 0) return s;
+    return { ...s, selectedIndex: Math.min(s.selectedIndex + 1, s.chapters.length - 1) };
   },
 } satisfies {
   [K in ReaderAction["type"]]: (
@@ -147,4 +310,7 @@ export const initialReaderState: ReaderState = {
   parseError: null,
   suggestions: [],
   selectedIndex: -1,
+  phase: "book",
+  chapters: [],
+  bookChosen: null,
 };

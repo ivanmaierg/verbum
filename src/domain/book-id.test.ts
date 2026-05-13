@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { makeBookId } from "@/domain/book-id";
+import { makeBookId, bookIdFromCanonical } from "@/domain/book-id";
 
 describe("makeBookId", () => {
   it("accepts JHN — a canonical USFM code", () => {
@@ -38,5 +38,23 @@ describe("makeBookId", () => {
     // Alias normalisation happens in parseReference, not makeBookId.
     const result = makeBookId("jhn");
     expect(result.ok).toBe(false);
+  });
+});
+
+describe("bookIdFromCanonical", () => {
+  it("accepts canonical uppercase", () => {
+    expect(bookIdFromCanonical("JHN") as string).toBe("JHN");
+  });
+
+  it("is case-insensitive (lowercase jhn returns JHN)", () => {
+    expect(bookIdFromCanonical("jhn") as string).toBe("JHN");
+  });
+
+  it("is case-insensitive (mixed-case jHn returns JHN)", () => {
+    expect(bookIdFromCanonical("jHn") as string).toBe("JHN");
+  });
+
+  it("throws on unknown canonical", () => {
+    expect(() => bookIdFromCanonical("XYZ")).toThrow();
   });
 });

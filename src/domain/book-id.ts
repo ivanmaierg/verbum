@@ -33,3 +33,9 @@ export function makeBookId(s: string): Result<BookId, UnknownBookError> {
   }
   return { ok: true, value: s as BookId }; // the only `as BookId` cast — R6
 }
+
+export function bookIdFromCanonical(canonical: string): BookId {
+  const result = makeBookId(canonical.toUpperCase());
+  if (!result.ok) throw new Error(`bookIdFromCanonical: unknown book "${canonical}"`);
+  return result.value;
+}
