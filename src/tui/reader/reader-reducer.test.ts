@@ -65,7 +65,7 @@ describe("readerReducer", () => {
   });
 
   describe("QueryTyped", () => {
-    it("updates query, clears parseError, recomputes suggestions, and resets selectedIndex when awaiting", () => {
+    it("updates query, clears parseError, recomputes suggestions, and auto-selects top match when awaiting", () => {
       const state: ReaderState = {
         kind: "awaiting",
         query: "",
@@ -81,8 +81,25 @@ describe("readerReducer", () => {
       if (next.kind !== "awaiting") return;
       expect(next.query).toBe("joh");
       expect(next.parseError).toBeNull();
-      expect(next.selectedIndex).toBe(-1);
+      expect(next.selectedIndex).toBe(0);
       expect(next.suggestions.length).toBeGreaterThan(0);
+    });
+
+    it("sets selectedIndex to -1 when query produces no suggestions", () => {
+      const state: ReaderState = {
+        kind: "awaiting",
+        query: "",
+        parseError: null,
+        suggestions: [],
+        selectedIndex: 0,
+        phase: "book",
+        chapters: [],
+        bookChosen: null,
+      };
+      const next = dispatch(state, { type: "QueryTyped", query: "zzzzz" });
+      if (next.kind !== "awaiting") throw new Error("expected awaiting");
+      expect(next.suggestions).toEqual([]);
+      expect(next.selectedIndex).toBe(-1);
     });
 
     it("populates suggestions matching the query", () => {
@@ -728,6 +745,219 @@ describe("readerReducer", () => {
       const state = makeAwaiting({ phase: "book" });
       const next = dispatch(state, { type: "PickerBackedOut" });
       expect(next).toBe(state);
+    });
+  });
+
+  describe("QueryTyped (chapter phase digit suffix)", () => {
+    function chapterState(query: string, selectedIndex = 0): ReaderState {
+      return makeAwaiting({
+        phase: "chapter",
+        bookChosen: { alias: "john", canonical: "JHN", displayName: "John" },
+        chapters: Array.from({ length: 21 }, (_, i) => i + 1),
+        selectedIndex,
+        query: "John ",
+      });
+    }
+
+    it("sets selectedIndex from a single trailing digit", () => {
+      const next = dispatch(chapterState("John "), { type: "QueryTyped", query: "John 3" });
+      if (next.kind !== "awaiting") throw new Error("expected awaiting");
+      expect(next.phase).toBe("chapter");
+      expect(next.selectedIndex).toBe(2);
+    });
+
+    it("sets selectedIndex from a two-digit suffix (multi-digit support)", () => {
+      const next = dispatch(chapterState("John "), { type: "QueryTyped", query: "John 21" });
+      if (next.kind !== "awaiting") throw new Error("expected awaiting");
+      expect(next.selectedIndex).toBe(20);
+    });
+
+    it("keeps the previous selectedIndex when the digit is out of range", () => {
+      const next = dispatch(chapterState("John ", 4), { type: "QueryTyped", query: "John 99" });
+      if (next.kind !== "awaiting") throw new Error("expected awaiting");
+      expect(next.selectedIndex).toBe(4);
+    });
+
+    it("ignores the digit when n is 0 (chapters are 1-indexed)", () => {
+      const next = dispatch(chapterState("John ", 7), { type: "QueryTyped", query: "John 0" });
+      if (next.kind !== "awaiting") throw new Error("expected awaiting");
+      expect(next.selectedIndex).toBe(7);
+    });
+  });
+
+  describe("QuerySubmitted (chapter phase)", () => {
+    function chapterState(query: string, selectedIndex = 2): ReaderState {
+      return makeAwaiting({
+        phase: "chapter",
+        bookChosen: { alias: "john", canonical: "JHN", displayName: "John" },
+        chapters: Array.from({ length: 21 }, (_, i) => i + 1),
+        selectedIndex,
+        query,
+      });
+    }
+
+    it("picks the highlighted chapter with pick-verse intent when query has no colon", () => {
+      const next = dispatch(chapterState("John 3", 2), { type: "QuerySubmitted" });
+      expect(next.kind).toBe("loading");
+      if (next.kind !== "loading") return;
+      expect(next.ref.chapter).toBe(3);
+      expect(next.intent).toBe("pick-verse");
+    });
+
+    it("uses parseReference (view intent) when the query contains a colon", () => {
+      const next = dispatch(chapterState("John 3:16", 2), { type: "QuerySubmitted" });
+      expect(next.kind).toBe("loading");
+      if (next.kind !== "loading") return;
+      expect(next.ref.chapter).toBe(3);
+      expect(next.ref.verses).toEqual({ start: 16, end: 16 });
+      expect(next.intent).toBe("view");
+    });
+
+    it("is a no-op when selectedIndex is -1 and no colon present", () => {
+      const state = chapterState("John ", -1);
+      const next = dispatch(state, { type: "QuerySubmitted" });
+      expect(next).toBe(state);
+    });
+  });
+
+  describe("QuerySubmitted (book phase fallback to suggestion)", () => {
+    it("regression: typing 'john' then Enter enters chapter phase for John", () => {
+      let state: ReaderState = initialReaderState;
+      state = dispatch(state, { type: "QueryTyped", query: "john" });
+      if (state.kind !== "awaiting") throw new Error("expected awaiting");
+      expect(state.selectedIndex).toBe(0);
+      expect(state.suggestions[0]?.displayName).toBe("John");
+
+      const next = dispatch(state, { type: "QuerySubmitted" });
+      if (next.kind !== "awaiting") throw new Error("expected awaiting after enter");
+      expect(next.phase).toBe("chapter");
+      expect(next.bookChosen?.canonical).toBe("JHN");
+      expect(next.query).toBe("John ");
+      expect(next.selectedIndex).toBe(0);
+    });
+
+    it("case-insensitively: typing 'JOHN' then Enter picks John", () => {
+      let state: ReaderState = initialReaderState;
+      state = dispatch(state, { type: "QueryTyped", query: "JOHN" });
+      const next = dispatch(state, { type: "QuerySubmitted" });
+      if (next.kind !== "awaiting") throw new Error("expected awaiting");
+      expect(next.phase).toBe("chapter");
+      expect(next.bookChosen?.canonical).toBe("JHN");
+    });
+
+    it("falls through to parseError when neither parse succeeds nor a suggestion is available", () => {
+      const state: ReaderState = makeAwaiting({ query: "zzz", suggestions: [], selectedIndex: -1 });
+      const next = dispatch(state, { type: "QuerySubmitted" });
+      if (next.kind !== "awaiting") throw new Error("expected awaiting");
+      expect(next.parseError).not.toBeNull();
+    });
+  });
+
+  describe("ChapterGridMovedDown", () => {
+    function chapterState(selectedIndex: number, total = 21): ReaderState {
+      return makeAwaiting({
+        phase: "chapter",
+        bookChosen: { alias: "john", canonical: "JHN", displayName: "John" },
+        chapters: Array.from({ length: total }, (_, i) => i + 1),
+        selectedIndex,
+        query: "John ",
+      });
+    }
+
+    it("adds 10 (one row) to selectedIndex", () => {
+      const next = dispatch(chapterState(2), { type: "ChapterGridMovedDown" });
+      if (next.kind !== "awaiting") throw new Error("expected awaiting");
+      expect(next.selectedIndex).toBe(12);
+    });
+
+    it("clamps at chapters.length - 1", () => {
+      const next = dispatch(chapterState(18, 21), { type: "ChapterGridMovedDown" });
+      if (next.kind !== "awaiting") throw new Error("expected awaiting");
+      expect(next.selectedIndex).toBe(20);
+    });
+
+    it("is a no-op when not in chapter phase", () => {
+      const state = makeAwaiting({ phase: "book" });
+      const next = dispatch(state, { type: "ChapterGridMovedDown" });
+      expect(next).toBe(state);
+    });
+
+    it("is a no-op when chapters is empty", () => {
+      const state = makeAwaiting({ phase: "chapter", chapters: [], selectedIndex: 0 });
+      const next = dispatch(state, { type: "ChapterGridMovedDown" });
+      expect(next).toBe(state);
+    });
+  });
+
+  describe("ChapterGridMovedUp", () => {
+    function chapterState(selectedIndex: number): ReaderState {
+      return makeAwaiting({
+        phase: "chapter",
+        bookChosen: { alias: "john", canonical: "JHN", displayName: "John" },
+        chapters: Array.from({ length: 21 }, (_, i) => i + 1),
+        selectedIndex,
+        query: "John ",
+      });
+    }
+
+    it("subtracts 10 (one row) from selectedIndex", () => {
+      const next = dispatch(chapterState(15), { type: "ChapterGridMovedUp" });
+      if (next.kind !== "awaiting") throw new Error("expected awaiting");
+      expect(next.selectedIndex).toBe(5);
+    });
+
+    it("clamps at 0", () => {
+      const next = dispatch(chapterState(5), { type: "ChapterGridMovedUp" });
+      if (next.kind !== "awaiting") throw new Error("expected awaiting");
+      expect(next.selectedIndex).toBe(0);
+    });
+  });
+
+  describe("ChapterGridMovedRight", () => {
+    function chapterState(selectedIndex: number): ReaderState {
+      return makeAwaiting({
+        phase: "chapter",
+        bookChosen: { alias: "john", canonical: "JHN", displayName: "John" },
+        chapters: Array.from({ length: 21 }, (_, i) => i + 1),
+        selectedIndex,
+        query: "John ",
+      });
+    }
+
+    it("adds 1 to selectedIndex", () => {
+      const next = dispatch(chapterState(0), { type: "ChapterGridMovedRight" });
+      if (next.kind !== "awaiting") throw new Error("expected awaiting");
+      expect(next.selectedIndex).toBe(1);
+    });
+
+    it("clamps at chapters.length - 1", () => {
+      const next = dispatch(chapterState(20), { type: "ChapterGridMovedRight" });
+      if (next.kind !== "awaiting") throw new Error("expected awaiting");
+      expect(next.selectedIndex).toBe(20);
+    });
+  });
+
+  describe("ChapterGridMovedLeft", () => {
+    function chapterState(selectedIndex: number): ReaderState {
+      return makeAwaiting({
+        phase: "chapter",
+        bookChosen: { alias: "john", canonical: "JHN", displayName: "John" },
+        chapters: Array.from({ length: 21 }, (_, i) => i + 1),
+        selectedIndex,
+        query: "John ",
+      });
+    }
+
+    it("subtracts 1 from selectedIndex", () => {
+      const next = dispatch(chapterState(3), { type: "ChapterGridMovedLeft" });
+      if (next.kind !== "awaiting") throw new Error("expected awaiting");
+      expect(next.selectedIndex).toBe(2);
+    });
+
+    it("clamps at 0", () => {
+      const next = dispatch(chapterState(0), { type: "ChapterGridMovedLeft" });
+      if (next.kind !== "awaiting") throw new Error("expected awaiting");
+      expect(next.selectedIndex).toBe(0);
     });
   });
 });

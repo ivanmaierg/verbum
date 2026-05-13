@@ -34,7 +34,15 @@ function App({
       return;
     }
     if (readerState.kind === "awaiting") {
-      if (readerState.phase === "chapter" && name === "escape") { dispatch({ type: "PickerBackedOut" }); return; }
+      if (readerState.phase === "chapter") {
+        if (name === "escape") { dispatch({ type: "PickerBackedOut" }); return; }
+        if (name === "up") { dispatch({ type: "ChapterGridMovedUp" }); return; }
+        if (name === "down") { dispatch({ type: "ChapterGridMovedDown" }); return; }
+        if (name === "left") { dispatch({ type: "ChapterGridMovedLeft" }); return; }
+        if (name === "right") { dispatch({ type: "ChapterGridMovedRight" }); return; }
+        if (name === "tab") { dispatch({ type: "SuggestionAccepted" }); return; }
+        return;
+      }
       if (name === "down") { dispatch({ type: "SuggestionMovedDown" }); return; }
       if (name === "up") { dispatch({ type: "SuggestionMovedUp" }); return; }
       if (name === "tab") { dispatch({ type: "SuggestionAccepted" }); return; }

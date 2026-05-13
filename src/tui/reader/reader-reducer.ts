@@ -38,7 +38,11 @@ export type ReaderAction =
   | { type: "VersePickerMovedRight" }
   | { type: "VersePickerAccepted" }
   | { type: "VersePickerCancelled" }
-  | { type: "PickerBackedOut" };
+  | { type: "PickerBackedOut" }
+  | { type: "ChapterGridMovedUp" }
+  | { type: "ChapterGridMovedDown" }
+  | { type: "ChapterGridMovedLeft" }
+  | { type: "ChapterGridMovedRight" };
 
 const handlers = {
   QueryTyped: (s: ReaderState, a: Extract<ReaderAction, { type: "QueryTyped" }>): ReaderState => {
@@ -52,14 +56,26 @@ const handlers = {
       s.bookChosen !== null &&
       a.query.toLowerCase().startsWith(`${s.bookChosen.displayName.toLowerCase()} `)
     ) {
-      return { ...s, query: a.query, parseError: null };
+      // Decode trailing digit suffix → grid selection. Multi-digit naturally works:
+      // "John 1" highlights chapter 1, "John 10" highlights chapter 10.
+      const suffix = a.query.slice(s.bookChosen.displayName.length + 1);
+      const digitMatch = /^(\d+)/.exec(suffix);
+      let selectedIndex = s.selectedIndex;
+      if (digitMatch) {
+        const n = parseInt(digitMatch[1], 10);
+        if (n >= 1 && n <= s.chapters.length) selectedIndex = n - 1;
+      }
+      return { ...s, query: a.query, parseError: null, selectedIndex };
     }
+    // Book phase: re-suggest and auto-highlight the top match so Tab/Enter
+    // accept the obvious choice without arrow-down first (fzf-style).
+    const suggestions = suggestBooks(a.query);
     return {
       ...s,
       query: a.query,
       parseError: null,
-      suggestions: suggestBooks(a.query),
-      selectedIndex: -1,
+      suggestions,
+      selectedIndex: suggestions.length > 0 ? 0 : -1,
       phase: "book",
       bookChosen: null,
       chapters: [],
@@ -68,10 +84,34 @@ const handlers = {
 
   QuerySubmitted: (s: ReaderState, _a: Extract<ReaderAction, { type: "QuerySubmitted" }>): ReaderState => {
     if (s.kind !== "awaiting") return s;
+    // Chapter phase: Enter commits the highlighted chapter into the verse picker,
+    // UNLESS the user typed a colon — in which case they want a direct ref.
+    if (s.phase === "chapter" && s.bookChosen !== null) {
+      if (s.query.includes(":")) {
+        const result = parseReference(s.query);
+        return result.ok
+          ? { kind: "loading", ref: result.value, intent: "view" }
+          : { ...s, parseError: result.error };
+      }
+      if (s.selectedIndex < 0) return s;
+      const chapter = s.chapters[s.selectedIndex];
+      return {
+        kind: "loading",
+        ref: { book: bookIdFromCanonical(s.bookChosen.canonical), chapter, verses: { start: 1, end: 1 } },
+        intent: "pick-verse",
+      };
+    }
+    // Book phase: try parseReference; on failure, fall back to picking the
+    // highlighted suggestion so "john" + Enter enters chapter phase for John.
     const result = parseReference(s.query);
-    return result.ok
-      ? { kind: "loading", ref: result.value, intent: "view" }
-      : { ...s, parseError: result.error };
+    if (result.ok) return { kind: "loading", ref: result.value, intent: "view" };
+    if (s.suggestions.length > 0 && s.selectedIndex >= 0) {
+      const chosen = s.suggestions[s.selectedIndex];
+      const n = chaptersForBook(chosen.canonical);
+      const chapters = Array.from({ length: n }, (_, i) => i + 1);
+      return { ...s, phase: "chapter", bookChosen: chosen, chapters, selectedIndex: 0, suggestions: [], query: `${chosen.displayName} ` };
+    }
+    return { ...s, parseError: result.error };
   },
 
   PassageFetched: (s: ReaderState, a: Extract<ReaderAction, { type: "PassageFetched" }>): ReaderState => {
@@ -229,6 +269,26 @@ const handlers = {
   PickerBackedOut: (s: ReaderState, _a: Extract<ReaderAction, { type: "PickerBackedOut" }>): ReaderState => {
     if (s.kind !== "awaiting" || s.phase !== "chapter") return s;
     return { ...s, phase: "book", bookChosen: null, chapters: [], selectedIndex: -1, suggestions: suggestBooks(s.query) };
+  },
+
+  ChapterGridMovedUp: (s: ReaderState, _a: Extract<ReaderAction, { type: "ChapterGridMovedUp" }>): ReaderState => {
+    if (s.kind !== "awaiting" || s.phase !== "chapter" || s.chapters.length === 0) return s;
+    return { ...s, selectedIndex: Math.max(s.selectedIndex - 10, 0) };
+  },
+
+  ChapterGridMovedDown: (s: ReaderState, _a: Extract<ReaderAction, { type: "ChapterGridMovedDown" }>): ReaderState => {
+    if (s.kind !== "awaiting" || s.phase !== "chapter" || s.chapters.length === 0) return s;
+    return { ...s, selectedIndex: Math.min(s.selectedIndex + 10, s.chapters.length - 1) };
+  },
+
+  ChapterGridMovedLeft: (s: ReaderState, _a: Extract<ReaderAction, { type: "ChapterGridMovedLeft" }>): ReaderState => {
+    if (s.kind !== "awaiting" || s.phase !== "chapter" || s.chapters.length === 0) return s;
+    return { ...s, selectedIndex: Math.max(s.selectedIndex - 1, 0) };
+  },
+
+  ChapterGridMovedRight: (s: ReaderState, _a: Extract<ReaderAction, { type: "ChapterGridMovedRight" }>): ReaderState => {
+    if (s.kind !== "awaiting" || s.phase !== "chapter" || s.chapters.length === 0) return s;
+    return { ...s, selectedIndex: Math.min(s.selectedIndex + 1, s.chapters.length - 1) };
   },
 } satisfies {
   [K in ReaderAction["type"]]: (
