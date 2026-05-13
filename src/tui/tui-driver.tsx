@@ -49,6 +49,23 @@ function App({
       return;
     }
 
+    if (readerState.kind === "loaded" && readerState.translationPicker !== null) {
+      if (name === "escape") { dispatch({ type: "TranslationPickerDismissed" }); return; }
+      if (readerState.translationPicker.status !== "ready") return;
+      if (name === "up") { dispatch({ type: "TranslationPickerMovedUp" }); return; }
+      if (name === "down") { dispatch({ type: "TranslationPickerMovedDown" }); return; }
+      if (name === "return") { dispatch({ type: "TranslationPickerAccepted" }); return; }
+      if (name === "backspace") {
+        dispatch({ type: "TranslationPickerQueryTyped", query: readerState.translationPicker.query.slice(0, -1) });
+        return;
+      }
+      if (keyEvent.sequence && keyEvent.sequence.length === 1 && keyEvent.sequence >= " ") {
+        dispatch({ type: "TranslationPickerQueryTyped", query: readerState.translationPicker.query + keyEvent.sequence });
+        return;
+      }
+      return;
+    }
+
     if (readerState.kind === "loaded" && readerState.versePicker !== null) {
       if (name === "up") { dispatch({ type: "VersePickerMovedUp" }); return; }
       if (name === "down") { dispatch({ type: "VersePickerMovedDown" }); return; }
@@ -66,6 +83,7 @@ function App({
     if (name === "]") { dispatch({ type: "PageAdvanced" }); return; }
     if (name === "n") { dispatch({ type: "ChapterAdvanced" }); return; }
     if (name === "p") { dispatch({ type: "ChapterRetreated" }); return; }
+    if (name === "t") { dispatch({ type: "TranslationPickerOpened" }); return; }
     if (name === "/") { dispatch({ type: "PaletteReopened" }); return; }
   });
 

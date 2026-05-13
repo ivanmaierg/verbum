@@ -42,6 +42,18 @@ export const RawChapterContentItemSchema = z.union([
   z.object({ type: z.string() }).passthrough(),
 ]);
 
+export const RawTranslationSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  language: z.string(),
+  englishName: z.string(),
+  textDirection: z.enum(["ltr", "rtl"]).optional().default("ltr"),
+}).passthrough();
+
+export const RawTranslationsResponseSchema = z.object({
+  translations: z.array(RawTranslationSchema),
+}).passthrough();
+
 export const RawChapterResponseSchema = z.object({
   translation: z.object({ id: z.string() }),
   book: z.object({ id: z.string() }),

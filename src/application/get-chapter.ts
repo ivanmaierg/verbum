@@ -3,14 +3,15 @@ import type { Reference } from "@/domain/reference";
 import type { Passage } from "@/domain/passage";
 import type { AppError } from "@/domain/errors";
 import type { BibleRepository } from "@/application/ports/bible-repository";
-import { DEFAULT_TRANSLATION_ID } from "@/domain/translations";
+import type { TranslationId } from "@/domain/translations";
 
 export async function getChapter(
   repo: BibleRepository,
+  translationId: TranslationId,
   ref: Reference,
 ): Promise<Result<Passage, AppError>> {
   const chapterResult = await repo.getChapter(
-    DEFAULT_TRANSLATION_ID,
+    translationId,
     ref.book,
     ref.chapter,
   );

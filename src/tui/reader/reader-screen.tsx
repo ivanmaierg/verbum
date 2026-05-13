@@ -4,9 +4,10 @@ import { useTerminalDimensions } from "@opentui/react";
 import { SPINNER_FRAMES } from "@/cli/loading";
 import { ACCENT_HEX } from "@/presentation/colors";
 import { usePassageFetch } from "@/tui/reader/use-passage-fetch";
+import { useTranslationsFetch } from "@/tui/reader/use-translations-fetch";
 import { VERSES_PER_PAGE } from "@/tui/reader/reader-reducer";
 import type { BibleRepository } from "@/application/ports/bible-repository";
-import type { ReaderState, ReaderAction } from "@/tui/reader/reader-reducer";
+import type { ReaderState, ReaderAction, TranslationPickerSubState } from "@/tui/reader/reader-reducer";
 import type { Dispatch } from "react";
 import type { Verse } from "@/domain/passage";
 
@@ -22,6 +23,7 @@ const PAGE_MAX_WIDTH = 70;
 
 export function ReaderScreen({ state, dispatch, repo }: ReaderScreenProps) {
   usePassageFetch(state, dispatch, repo);
+  useTranslationsFetch(state, dispatch, repo);
 
   const [frame, setFrame] = useState(0);
   useEffect(() => {
@@ -51,14 +53,14 @@ export function ReaderScreen({ state, dispatch, repo }: ReaderScreenProps) {
   );
 }
 
-function titleFor(state: ReaderState): string {
+export function titleFor(state: ReaderState): string {
   switch (state.kind) {
     case "awaiting":
       return " verbum ";
     case "loading":
     case "loaded":
     case "network-error":
-      return ` ${state.ref.book} ${state.ref.chapter} — Berean Standard Bible `;
+      return ` ${state.ref.book} ${state.ref.chapter} — ${state.translationName} `;
   }
 }
 
@@ -73,10 +75,13 @@ export function bottomTitleFor(state: ReaderState): string {
     return " loading…  •  q quit ";
   }
   if (state.kind === "loaded") {
+    if (state.translationPicker !== null) {
+      return " ↑↓ navigate  •  Enter select  •  Esc dismiss  •  type to filter ";
+    }
     if (state.versePicker !== null) {
       return " Pick a verse  •  ↑↓ row  •  ←→ cell  •  Tab accept  •  Esc cancel ";
     }
-    return " ↑↓ verse  •  [ ] page  •  n p chapter  •  / palette  •  q quit ";
+    return " ↑↓ verse  •  [ ] page  •  n p chapter  •  t translation  •  / palette  •  q quit ";
   }
   return " / palette  •  q quit ";
 }
@@ -87,6 +92,40 @@ type BodyProps = {
   frame: number;
   boxWidth: number;
 };
+
+function TranslationPickerOverlay({ picker, dispatch }: { picker: TranslationPickerSubState; dispatch: Dispatch<ReaderAction> }) {
+  if (picker.status === "loading") {
+    return <text attributes={DIM}>{"  Loading translations…"}</text>;
+  }
+  if (picker.status === "error") {
+    return <text>{"  ⚠ could not load translations — Esc to dismiss"}</text>;
+  }
+  return (
+    <box flexDirection="column">
+      <box width={50} marginLeft={2} marginTop={1}>
+        <input
+          focused
+          value={picker.query}
+          onInput={(v) => dispatch({ type: "TranslationPickerQueryTyped", query: v })}
+          onSubmit={() => dispatch({ type: "TranslationPickerAccepted" })}
+        />
+      </box>
+      <box flexDirection="column" marginLeft={2}>
+        {picker.visibleItems.map((t, i) => {
+          const selected = i === picker.selectedIndex;
+          return (
+            <text key={String(t.id)}>
+              <span fg={selected ? ACCENT_HEX : undefined}>{selected ? "▶ " : "  "}</span>
+              <span fg={selected ? ACCENT_HEX : undefined}>{t.name}</span>
+              {"  "}
+              <span attributes={DIM}>{t.languageEnglishName}</span>
+            </text>
+          );
+        })}
+      </box>
+    </box>
+  );
+}
 
 function Body({ state, dispatch, frame, boxWidth }: BodyProps) {
   if (state.kind === "awaiting") {
@@ -148,7 +187,11 @@ function Body({ state, dispatch, frame, boxWidth }: BodyProps) {
     );
   }
 
-  const { passage, cursorIndex, pageStartIndex, versePicker } = state;
+  const { passage, cursorIndex, pageStartIndex, versePicker, translationPicker } = state;
+
+  if (translationPicker !== null) {
+    return <TranslationPickerOverlay picker={translationPicker} dispatch={dispatch} />;
+  }
 
   if (versePicker !== null) {
     return (

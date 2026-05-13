@@ -16,7 +16,7 @@ export function usePassageFetch(
     let cancelled = false;
     const ref = state.ref;
 
-    getChapter(repo, ref).then((result) => {
+    getChapter(repo, state.translationId, ref).then((result) => {
       if (cancelled) return;
       if (result.ok) {
         dispatch({ type: "PassageFetched", passage: result.value });
@@ -34,6 +34,7 @@ export function usePassageFetch(
       cancelled = true;
     };
   // ref is an object — spread the scalar fields as deps to avoid stale closure on navigation.
+  // translationId included so same-ref/new-translation switches re-fire (design §data-flow).
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.kind, state.kind === "loading" ? state.ref.book : null, state.kind === "loading" ? state.ref.chapter : null]);
+  }, [state.kind, state.kind === "loading" ? state.ref.book : null, state.kind === "loading" ? state.ref.chapter : null, state.kind === "loading" ? state.translationId : null]);
 }

@@ -40,9 +40,10 @@ describe("getPassage", () => {
 
     const stubRepo: BibleRepository = {
       getChapter: async () => ({ ok: true, value: chapter }),
+      getTranslations: async () => ({ ok: true, value: [] }),
     };
 
-    const result = await getPassage(stubRepo, johnRef(16));
+    const result = await getPassage(stubRepo, DEFAULT_TRANSLATION_ID, johnRef(16));
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.value.verses).toHaveLength(1);
@@ -58,9 +59,10 @@ describe("getPassage", () => {
 
     const stubRepo: BibleRepository = {
       getChapter: async () => ({ ok: true, value: chapter }),
+      getTranslations: async () => ({ ok: true, value: [] }),
     };
 
-    const result = await getPassage(stubRepo, johnRef(99));
+    const result = await getPassage(stubRepo, DEFAULT_TRANSLATION_ID, johnRef(99));
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error.kind).toBe("verse_not_found");
@@ -72,9 +74,10 @@ describe("getPassage", () => {
         ok: false,
         error: { kind: "network", message: "timeout" },
       }),
+      getTranslations: async () => ({ ok: true, value: [] }),
     };
 
-    const result = await getPassage(stubRepo, johnRef(16));
+    const result = await getPassage(stubRepo, DEFAULT_TRANSLATION_ID, johnRef(16));
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error.kind).toBe("network");

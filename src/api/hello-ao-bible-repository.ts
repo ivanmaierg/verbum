@@ -4,9 +4,11 @@
 
 import type { BibleRepository } from "@/application/ports/bible-repository";
 import type { Chapter, Verse } from "@/domain/passage";
+import type { Translation } from "@/domain/translations";
 import type { BookId } from "@/domain/book-id";
 import type { TranslationId } from "@/domain/translations";
-import { RawChapterResponseSchema, RawVerseSchema } from "@/api/schemas";
+import { makeTranslationId } from "@/domain/translations";
+import { RawChapterResponseSchema, RawVerseSchema, RawTranslationsResponseSchema } from "@/api/schemas";
 
 // toVerseText — joins only string segments, strips { noteId } footnote refs.
 // Option A from the proposal: footnotes are out of v1 scope — R8 (REQ-8).
@@ -18,10 +20,45 @@ function toVerseText(items: Array<string | { noteId: number }>): string {
     .trim();
 }
 
+const TRANSLATIONS_ENDPOINT = "https://bible.helloao.org/api/available_translations.json";
+
 // createHelloAoBibleRepository — factory returning a BibleRepository object.
 // Uses Bun's built-in fetch(); no third-party HTTP library (REQ-9).
 export function createHelloAoBibleRepository(): BibleRepository {
+  let cached: Translation[] | null = null;
+
   return {
+    async getTranslations() {
+      if (cached !== null) return { ok: true, value: cached };
+      try {
+        const res = await fetch(TRANSLATIONS_ENDPOINT);
+        if (!res.ok) {
+          return { ok: false, error: { kind: "network", message: `HTTP ${res.status}` } };
+        }
+        const json: unknown = await res.json();
+        const parsed = RawTranslationsResponseSchema.safeParse(json);
+        if (!parsed.success) {
+          return { ok: false, error: { kind: "schema_mismatch", details: parsed.error.message } };
+        }
+        const translations: Translation[] = parsed.data.translations
+          .map((raw) => ({
+            id: makeTranslationId(raw.id),
+            name: raw.name,
+            language: raw.language,
+            languageEnglishName: raw.englishName,
+            textDirection: raw.textDirection,
+          }))
+          .sort((a, b) => {
+            const lang = a.languageEnglishName.localeCompare(b.languageEnglishName);
+            return lang !== 0 ? lang : a.name.localeCompare(b.name);
+          });
+        cached = translations;
+        return { ok: true, value: translations };
+      } catch (err) {
+        return { ok: false, error: { kind: "network", message: String(err) } };
+      }
+    },
+
     async getChapter(
       translationId: TranslationId,
       book: BookId,
