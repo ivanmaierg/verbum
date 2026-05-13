@@ -31,6 +31,7 @@ const stubRepo: BibleRepository = {
       } satisfies Chapter,
     };
   },
+  getTranslations: async () => ({ ok: true, value: [] }),
 };
 
 // Failing repo stub — simulates a network error from getChapter.
@@ -39,6 +40,7 @@ const failingRepo: BibleRepository = {
     ok: false,
     error: { kind: "network", message: "simulated failure" },
   }),
+  getTranslations: async () => ({ ok: true, value: [] }),
 };
 
 describe("smoke — verbum vod exit-1 path (repo failure)", () => {

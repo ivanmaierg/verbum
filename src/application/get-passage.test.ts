@@ -40,6 +40,7 @@ describe("getPassage", () => {
 
     const stubRepo: BibleRepository = {
       getChapter: async () => ({ ok: true, value: chapter }),
+      getTranslations: async () => ({ ok: true, value: [] }),
     };
 
     const result = await getPassage(stubRepo, johnRef(16));
@@ -58,6 +59,7 @@ describe("getPassage", () => {
 
     const stubRepo: BibleRepository = {
       getChapter: async () => ({ ok: true, value: chapter }),
+      getTranslations: async () => ({ ok: true, value: [] }),
     };
 
     const result = await getPassage(stubRepo, johnRef(99));
@@ -72,6 +74,7 @@ describe("getPassage", () => {
         ok: false,
         error: { kind: "network", message: "timeout" },
       }),
+      getTranslations: async () => ({ ok: true, value: [] }),
     };
 
     const result = await getPassage(stubRepo, johnRef(16));

@@ -30,6 +30,7 @@ describe("getChapter", () => {
           },
         };
       },
+      async getTranslations() { return { ok: true, value: [] }; },
     };
     const result = await getChapter(repo, ref);
     expect(result.ok).toBe(true);
@@ -44,6 +45,7 @@ describe("getChapter", () => {
       async getChapter() {
         return { ok: false, error: { kind: "chapter_not_found", chapter: 3 } };
       },
+      async getTranslations() { return { ok: true, value: [] }; },
     };
     const result = await getChapter(repo, ref);
     expect(result.ok).toBe(false);
@@ -57,6 +59,7 @@ describe("getChapter", () => {
       async getChapter() {
         return { ok: false, error: { kind: "network", message: "down" } };
       },
+      async getTranslations() { return { ok: true, value: [] }; },
     };
     const result = await getChapter(repo, ref);
     expect(result.ok).toBe(false);

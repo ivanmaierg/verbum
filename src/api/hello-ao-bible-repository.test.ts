@@ -39,6 +39,93 @@ describe("RawChapterResponseSchema", () => {
   });
 });
 
+describe("getTranslations", () => {
+  const fakeTranslations = [
+    { id: "BSB", name: "Berean Standard Bible", language: "en", englishName: "English", textDirection: "ltr" },
+    { id: "KJV", name: "King James Version", language: "en", englishName: "English", textDirection: "ltr" },
+    { id: "LSG", name: "Louis Segond", language: "fr", englishName: "French", textDirection: "ltr" },
+  ];
+
+  it("returns ok:true with sorted translations on 200 response", async () => {
+    const restore = stubFetch({
+      ok: true,
+      json: async () => ({ translations: fakeTranslations }),
+    });
+    const repo = createHelloAoBibleRepository();
+    const result = await repo.getTranslations();
+    restore();
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.length).toBe(3);
+  });
+
+  it("returns items sorted by languageEnglishName then name", async () => {
+    const unsorted = [
+      { id: "B", name: "Zeta Bible", language: "fr", englishName: "French", textDirection: "ltr" },
+      { id: "A", name: "Alpha Bible", language: "en", englishName: "English", textDirection: "ltr" },
+      { id: "C", name: "Alpha Bible", language: "fr", englishName: "French", textDirection: "ltr" },
+    ];
+    const restore = stubFetch({ ok: true, json: async () => ({ translations: unsorted }) });
+    const repo = createHelloAoBibleRepository();
+    const result = await repo.getTranslations();
+    restore();
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value[0]!.languageEnglishName).toBe("English");
+    expect(result.value[1]!.languageEnglishName).toBe("French");
+    expect(result.value[1]!.name).toBe("Alpha Bible");
+    expect(result.value[2]!.name).toBe("Zeta Bible");
+  });
+
+  it("caches — two calls share one network request", async () => {
+    let callCount = 0;
+    const original = globalThis.fetch;
+    // @ts-expect-error — test stub
+    globalThis.fetch = async () => {
+      callCount++;
+      return { ok: true, status: 200, json: async () => ({ translations: fakeTranslations }) };
+    };
+    const repo = createHelloAoBibleRepository();
+    await repo.getTranslations();
+    await repo.getTranslations();
+    globalThis.fetch = original;
+    expect(callCount).toBe(1);
+  });
+
+  it("returns ok:false on HTTP 500", async () => {
+    const restore = stubFetch({ ok: false, status: 500 });
+    const repo = createHelloAoBibleRepository();
+    const result = await repo.getTranslations();
+    restore();
+    expect(result.ok).toBe(false);
+  });
+
+  it("returns ok:false with schema_mismatch on malformed JSON", async () => {
+    const restore = stubFetch({ ok: true, json: async () => ({ wrong: "shape" }) });
+    const repo = createHelloAoBibleRepository();
+    const result = await repo.getTranslations();
+    restore();
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.kind).toBe("schema_mismatch");
+  });
+
+  it("does not cache on error — next call retries the network", async () => {
+    let callCount = 0;
+    const original = globalThis.fetch;
+    // @ts-expect-error — test stub
+    globalThis.fetch = async () => {
+      callCount++;
+      return { ok: false, status: 500 };
+    };
+    const repo = createHelloAoBibleRepository();
+    await repo.getTranslations();
+    await repo.getTranslations();
+    globalThis.fetch = original;
+    expect(callCount).toBe(2);
+  });
+});
+
 describe("createHelloAoBibleRepository", () => {
   describe("happy path", () => {
     let restore: () => void;

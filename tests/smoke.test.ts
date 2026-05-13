@@ -44,6 +44,7 @@ const fixtureChapter = buildChapterFromFixture();
 // Stub repository backed by the recorded fixture — no real HTTP.
 const fixtureRepo: BibleRepository = {
   getChapter: async () => ({ ok: true, value: fixtureChapter }),
+  getTranslations: async () => ({ ok: true, value: [] }),
 };
 
 describe("smoke — john 3:16 happy path", () => {
