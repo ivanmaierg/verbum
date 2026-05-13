@@ -9,6 +9,7 @@ import { createHelloAoBibleRepository } from "@/api/hello-ao-bible-repository";
 import { renderParseError, renderRepoError, renderPassage } from "@/cli/render";
 import { withLoading } from "@/cli/loading";
 import { isRepoError } from "@/domain/errors";
+import { DEFAULT_TRANSLATION_ID } from "@/domain/translations";
 import { runVod } from "@/cli/vod";
 
 // run — exit-code contract:
@@ -37,7 +38,7 @@ export async function run(argv: string[]): Promise<number> {
   }
 
   const repo = createHelloAoBibleRepository();
-  const passageResult = await withLoading(process.stderr, () => getPassage(repo, refResult.value));
+  const passageResult = await withLoading(process.stderr, () => getPassage(repo, DEFAULT_TRANSLATION_ID, refResult.value));
 
   if (!passageResult.ok) {
     // AppError = ParseError | RepoError. ParseError was already handled above

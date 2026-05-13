@@ -4,6 +4,7 @@ import { makeBookId } from "@/domain/book-id";
 import { DEFAULT_TRANSLATION_ID } from "@/domain/translations";
 import type { BibleRepository } from "@/application/ports/bible-repository";
 import type { Reference } from "@/domain/reference";
+import type { TranslationId } from "@/domain/translations";
 
 function jhn3Ref(verseStart: number, verseEnd = verseStart): Reference {
   const book = makeBookId("JHN");
@@ -32,7 +33,7 @@ describe("getChapter", () => {
       },
       async getTranslations() { return { ok: true, value: [] }; },
     };
-    const result = await getChapter(repo, ref);
+    const result = await getChapter(repo, DEFAULT_TRANSLATION_ID, ref);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.value.verses).toHaveLength(3);
@@ -47,7 +48,7 @@ describe("getChapter", () => {
       },
       async getTranslations() { return { ok: true, value: [] }; },
     };
-    const result = await getChapter(repo, ref);
+    const result = await getChapter(repo, DEFAULT_TRANSLATION_ID, ref);
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error.kind).toBe("chapter_not_found");
@@ -61,7 +62,7 @@ describe("getChapter", () => {
       },
       async getTranslations() { return { ok: true, value: [] }; },
     };
-    const result = await getChapter(repo, ref);
+    const result = await getChapter(repo, DEFAULT_TRANSLATION_ID, ref);
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error.kind).toBe("network");

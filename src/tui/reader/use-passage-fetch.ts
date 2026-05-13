@@ -3,6 +3,7 @@ import type { Dispatch } from "react";
 import { getChapter } from "@/application/get-chapter";
 import type { BibleRepository } from "@/application/ports/bible-repository";
 import { isRepoError } from "@/domain/errors";
+import { DEFAULT_TRANSLATION_ID } from "@/domain/translations";
 import type { ReaderState, ReaderAction } from "@/tui/reader/reader-reducer";
 
 export function usePassageFetch(
@@ -16,7 +17,7 @@ export function usePassageFetch(
     let cancelled = false;
     const ref = state.ref;
 
-    getChapter(repo, ref).then((result) => {
+    getChapter(repo, DEFAULT_TRANSLATION_ID, ref).then((result) => {
       if (cancelled) return;
       if (result.ok) {
         dispatch({ type: "PassageFetched", passage: result.value });

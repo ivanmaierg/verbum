@@ -7,7 +7,7 @@ import { getPassage } from "@/application/get-passage";
 import type { BibleRepository } from "@/application/ports/bible-repository";
 import type { Chapter } from "@/domain/passage";
 import { makeBookId } from "@/domain/book-id";
-import { makeTranslationId } from "@/domain/translations";
+import { makeTranslationId, DEFAULT_TRANSLATION_ID } from "@/domain/translations";
 import { parseReference } from "@/domain/reference";
 import { renderPassage, renderParseError } from "@/cli/render";
 import { RawChapterResponseSchema } from "@/api/schemas";
@@ -53,7 +53,7 @@ describe("smoke — john 3:16 happy path", () => {
     expect(refResult.ok).toBe(true);
     if (!refResult.ok) return;
 
-    const passageResult = await getPassage(fixtureRepo, refResult.value);
+    const passageResult = await getPassage(fixtureRepo, DEFAULT_TRANSLATION_ID, refResult.value);
     expect(passageResult.ok).toBe(true);
     if (!passageResult.ok) return;
 

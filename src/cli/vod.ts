@@ -12,6 +12,7 @@ import { getPassage } from "@/application/get-passage";
 import { renderParseError, renderRepoError, renderPassage } from "@/cli/render";
 import { withLoading } from "@/cli/loading";
 import { createHelloAoBibleRepository } from "@/api/hello-ao-bible-repository";
+import { DEFAULT_TRANSLATION_ID } from "@/domain/translations";
 import type { BibleRepository } from "@/application/ports/bible-repository";
 import type { Reference } from "@/domain/reference";
 import { isRepoError } from "@/domain/errors";
@@ -38,7 +39,7 @@ export async function runVod(
     verses: { start: entry.verse, end: entry.verse },
   };
 
-  const passageResult = await withLoading(process.stderr, () => getPassage(repo, ref));
+  const passageResult = await withLoading(process.stderr, () => getPassage(repo, DEFAULT_TRANSLATION_ID, ref));
   if (!passageResult.ok) {
     // AppError = ParseError | RepoError. Pool entries passed makeBookId so the
     // expected failures from getPassage are RepoErrors. Narrow via the type
