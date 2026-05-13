@@ -2,18 +2,34 @@ import { parseReference } from "@/domain/reference";
 import { suggestBooks } from "@/domain/book-suggestions";
 import { chaptersForBook } from "@/domain/book-chapters";
 import { bookIdFromCanonical } from "@/domain/book-id";
+import { DEFAULT_TRANSLATION_ID } from "@/domain/translations";
 import type { BookSuggestion } from "@/domain/book-suggestions";
 import type { Reference } from "@/domain/reference";
 import type { ParseError, RepoError } from "@/domain/errors";
 import type { Passage } from "@/domain/passage";
+import type { Translation, TranslationId } from "@/domain/translations";
 
 export const VERSES_PER_PAGE = 15;
 
+type TranslationFields = { translationId: TranslationId; translationName: string };
+
+export function withTranslation<T extends TranslationFields>(base: T, src: TranslationFields): T {
+  return { ...base, translationId: src.translationId, translationName: src.translationName };
+}
+
+export type TranslationPickerSubState = {
+  status: "loading" | "ready" | "error";
+  query: string;
+  items: Translation[];
+  visibleItems: Translation[];
+  selectedIndex: number;
+};
+
 export type ReaderState =
   | { kind: "awaiting"; query: string; parseError: ParseError | null; suggestions: BookSuggestion[]; selectedIndex: number; phase: "book" | "chapter"; chapters: number[]; bookChosen: BookSuggestion | null }
-  | { kind: "loading"; ref: Reference; intent: "view" | "pick-verse" }
-  | { kind: "loaded"; passage: Passage; ref: Reference; cursorIndex: number; pageStartIndex: number; versePicker: { selectedIndex: number } | null }
-  | { kind: "network-error"; ref: Reference; reason: RepoError };
+  | { kind: "loading"; ref: Reference; intent: "view" | "pick-verse"; translationId: TranslationId; translationName: string }
+  | { kind: "loaded"; passage: Passage; ref: Reference; cursorIndex: number; pageStartIndex: number; versePicker: { selectedIndex: number } | null; translationPicker: TranslationPickerSubState | null; translationId: TranslationId; translationName: string }
+  | { kind: "network-error"; ref: Reference; reason: RepoError; translationId: TranslationId; translationName: string };
 
 export type ReaderAction =
   | { type: "QueryTyped"; query: string }
@@ -88,13 +104,14 @@ const handlers = {
 
   QuerySubmitted: (s: ReaderState, _a: Extract<ReaderAction, { type: "QuerySubmitted" }>): ReaderState => {
     if (s.kind !== "awaiting") return s;
+    const seedTranslation: TranslationFields = { translationId: DEFAULT_TRANSLATION_ID, translationName: "Berean Standard Bible" };
     // Chapter phase: Enter commits the highlighted chapter into the verse picker,
     // UNLESS the user typed a colon — in which case they want a direct ref.
     if (s.phase === "chapter" && s.bookChosen !== null) {
       if (s.query.includes(":")) {
         const result = parseReference(s.query);
         return result.ok
-          ? { kind: "loading", ref: result.value, intent: "view" }
+          ? { kind: "loading", ref: result.value, intent: "view", ...seedTranslation }
           : { ...s, parseError: result.error };
       }
       if (s.selectedIndex < 0) return s;
@@ -103,12 +120,13 @@ const handlers = {
         kind: "loading",
         ref: { book: bookIdFromCanonical(s.bookChosen.canonical), chapter, verses: { start: 1, end: 1 } },
         intent: "pick-verse",
+        ...seedTranslation,
       };
     }
     // Book phase: try parseReference; on failure, fall back to picking the
     // highlighted suggestion so "john" + Enter enters chapter phase for John.
     const result = parseReference(s.query);
-    if (result.ok) return { kind: "loading", ref: result.value, intent: "view" };
+    if (result.ok) return { kind: "loading", ref: result.value, intent: "view", ...seedTranslation };
     if (s.suggestions.length > 0 && s.selectedIndex >= 0) {
       const chosen = s.suggestions[s.selectedIndex];
       const n = chaptersForBook(chosen.canonical);
@@ -125,23 +143,23 @@ const handlers = {
     const cursorIndex = foundIndex >= 0 ? foundIndex : 0;
     const pageStartIndex = Math.floor(cursorIndex / VERSES_PER_PAGE) * VERSES_PER_PAGE;
     const versePicker = s.intent === "pick-verse" ? { selectedIndex: 0 } : null;
-    return { kind: "loaded", passage: a.passage, ref: s.ref, cursorIndex, pageStartIndex, versePicker };
+    return { kind: "loaded", passage: a.passage, ref: s.ref, cursorIndex, pageStartIndex, versePicker, translationPicker: null, translationId: s.translationId, translationName: s.translationName };
   },
 
   FetchFailed: (s: ReaderState, a: Extract<ReaderAction, { type: "FetchFailed" }>): ReaderState =>
     s.kind === "loading"
-      ? { kind: "network-error", ref: a.ref, reason: a.reason }
+      ? { kind: "network-error", ref: a.ref, reason: a.reason, translationId: s.translationId, translationName: s.translationName }
       : s,
 
   ChapterAdvanced: (s: ReaderState, _a: Extract<ReaderAction, { type: "ChapterAdvanced" }>): ReaderState =>
     s.kind === "loaded"
-      ? { kind: "loading", ref: { ...s.ref, chapter: s.ref.chapter + 1, verses: { start: 1, end: 1 } }, intent: "view" }
+      ? { kind: "loading", ref: { ...s.ref, chapter: s.ref.chapter + 1, verses: { start: 1, end: 1 } }, intent: "view", translationId: s.translationId, translationName: s.translationName }
       : s,
 
   ChapterRetreated: (s: ReaderState, _a: Extract<ReaderAction, { type: "ChapterRetreated" }>): ReaderState => {
     if (s.kind !== "loaded") return s;
     if (s.ref.chapter <= 1) return s;
-    return { kind: "loading", ref: { ...s.ref, chapter: s.ref.chapter - 1, verses: { start: 1, end: 1 } }, intent: "view" };
+    return { kind: "loading", ref: { ...s.ref, chapter: s.ref.chapter - 1, verses: { start: 1, end: 1 } }, intent: "view", translationId: s.translationId, translationName: s.translationName };
   },
 
   PaletteReopened: (s: ReaderState, _a: Extract<ReaderAction, { type: "PaletteReopened" }>): ReaderState =>
@@ -200,6 +218,7 @@ const handlers = {
 
   SuggestionAccepted: (s: ReaderState, _a: Extract<ReaderAction, { type: "SuggestionAccepted" }>): ReaderState => {
     if (s.kind !== "awaiting" || s.selectedIndex < 0) return s;
+    const seedTranslation: TranslationFields = { translationId: DEFAULT_TRANSLATION_ID, translationName: "Berean Standard Bible" };
     if (s.phase === "book") {
       const chosen = s.suggestions[s.selectedIndex];
       const n = chaptersForBook(chosen.canonical);
@@ -213,6 +232,7 @@ const handlers = {
         kind: "loading",
         ref: { book: bookIdFromCanonical(s.bookChosen.canonical), chapter, verses: { start: 1, end: 1 } },
         intent: "pick-verse",
+        ...seedTranslation,
       };
     }
     return s;
@@ -233,6 +253,8 @@ const handlers = {
       kind: "loading",
       ref: { book: bookIdFromCanonical(s.bookChosen.canonical), chapter, verses: { start: 1, end: 1 } },
       intent: "pick-verse",
+      translationId: DEFAULT_TRANSLATION_ID,
+      translationName: "Berean Standard Bible",
     };
   },
 

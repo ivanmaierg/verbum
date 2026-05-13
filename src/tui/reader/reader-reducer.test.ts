@@ -6,6 +6,8 @@ import type { Passage } from "@/domain/passage";
 import type { RepoError } from "@/domain/errors";
 import type { Reference } from "@/domain/reference";
 import { chaptersForBook } from "@/domain/book-chapters";
+import { DEFAULT_TRANSLATION_ID, makeTranslationId } from "@/domain/translations";
+import { withTranslation } from "@/tui/reader/reader-reducer";
 
 const johnRef: Reference = {
   book: "JHN" as import("@/domain/book-id").BookId,
@@ -30,17 +32,46 @@ function makePassage(count: number): Passage {
   };
 }
 
+const BSB_TRANSLATION_ID = DEFAULT_TRANSLATION_ID;
+const BSB_TRANSLATION_NAME = "Berean Standard Bible";
+
 function makeLoaded(
   passage: Passage,
   cursorIndex: number,
   pageStartIndex: number,
 ): ReaderState {
-  return { kind: "loaded", passage, ref: johnRef, cursorIndex, pageStartIndex, versePicker: null };
+  return {
+    kind: "loaded",
+    passage,
+    ref: johnRef,
+    cursorIndex,
+    pageStartIndex,
+    versePicker: null,
+    translationPicker: null,
+    translationId: BSB_TRANSLATION_ID,
+    translationName: BSB_TRANSLATION_NAME,
+  };
+}
+
+function makeLoading(): ReaderState {
+  return { kind: "loading", ref: johnRef, intent: "view", translationId: BSB_TRANSLATION_ID, translationName: BSB_TRANSLATION_NAME };
 }
 
 function dispatch(state: ReaderState, action: ReaderAction): ReaderState {
   return readerReducer(state, action);
 }
+
+describe("withTranslation helper", () => {
+  it("propagates translationId and translationName from src to base", () => {
+    const base = makeLoaded(mockPassage, 0, 0);
+    if (base.kind !== "loaded") throw new Error("expected loaded");
+    const kjv = makeTranslationId("KJV");
+    const result = withTranslation(base, { translationId: kjv, translationName: "King James Version" });
+    expect(String(result.translationId)).toBe("KJV");
+    expect(result.translationName).toBe("King James Version");
+    expect(result.kind).toBe("loaded");
+  });
+});
 
 describe("readerReducer", () => {
   describe("initial state", () => {
@@ -120,7 +151,7 @@ describe("readerReducer", () => {
     });
 
     it("is a no-op when not awaiting", () => {
-      const state: ReaderState = { kind: "loading", ref: johnRef, intent: "view" };
+      const state: ReaderState = { kind: "loading", ref: johnRef, intent: "view", translationId: BSB_TRANSLATION_ID, translationName: BSB_TRANSLATION_NAME };
       const next = dispatch(state, { type: "QueryTyped", query: "genesis 1" });
       expect(next).toBe(state);
     });
@@ -154,7 +185,7 @@ describe("readerReducer", () => {
     });
 
     it("is a no-op when not awaiting", () => {
-      const state: ReaderState = { kind: "loading", ref: johnRef, intent: "view" };
+      const state: ReaderState = { kind: "loading", ref: johnRef, intent: "view", translationId: BSB_TRANSLATION_ID, translationName: BSB_TRANSLATION_NAME };
       const next = dispatch(state, { type: "QuerySubmitted" });
       expect(next).toBe(state);
     });
@@ -162,7 +193,7 @@ describe("readerReducer", () => {
 
   describe("PassageFetched", () => {
     it("defaults cursorIndex to 0 when the ref's target verse is not in the passage", () => {
-      const state: ReaderState = { kind: "loading", ref: johnRef, intent: "view" };
+      const state: ReaderState = { kind: "loading", ref: johnRef, intent: "view", translationId: BSB_TRANSLATION_ID, translationName: BSB_TRANSLATION_NAME };
       const next = dispatch(state, { type: "PassageFetched", passage: mockPassage });
       expect(next).toEqual({
         kind: "loaded",
@@ -171,6 +202,9 @@ describe("readerReducer", () => {
         cursorIndex: 0,
         pageStartIndex: 0,
         versePicker: null,
+        translationPicker: null,
+        translationId: BSB_TRANSLATION_ID,
+        translationName: BSB_TRANSLATION_NAME,
       });
     });
 
@@ -178,7 +212,7 @@ describe("readerReducer", () => {
       const passage = makePassage(VERSES_PER_PAGE * 3);
       const targetVerse = VERSES_PER_PAGE + 1;
       const ref: Reference = { ...johnRef, verses: { start: targetVerse, end: targetVerse } };
-      const state: ReaderState = { kind: "loading", ref, intent: "view" };
+      const state: ReaderState = { kind: "loading", ref, intent: "view", translationId: BSB_TRANSLATION_ID, translationName: BSB_TRANSLATION_NAME };
       const next = dispatch(state, { type: "PassageFetched", passage });
       if (next.kind !== "loaded") throw new Error("expected loaded state");
       expect(next.cursorIndex).toBe(targetVerse - 1);
@@ -189,7 +223,7 @@ describe("readerReducer", () => {
       const passage = makePassage(VERSES_PER_PAGE * 3);
       const targetVerse = VERSES_PER_PAGE * 2 + 1;
       const ref: Reference = { ...johnRef, verses: { start: targetVerse, end: targetVerse } };
-      const state: ReaderState = { kind: "loading", ref, intent: "view" };
+      const state: ReaderState = { kind: "loading", ref, intent: "view", translationId: BSB_TRANSLATION_ID, translationName: BSB_TRANSLATION_NAME };
       const next = dispatch(state, { type: "PassageFetched", passage });
       if (next.kind !== "loaded") throw new Error("expected loaded state");
       expect(next.cursorIndex).toBe(targetVerse - 1);
@@ -205,9 +239,9 @@ describe("readerReducer", () => {
 
   describe("FetchFailed", () => {
     it("transitions loading → network-error", () => {
-      const state: ReaderState = { kind: "loading", ref: johnRef, intent: "view" };
+      const state: ReaderState = { kind: "loading", ref: johnRef, intent: "view", translationId: BSB_TRANSLATION_ID, translationName: BSB_TRANSLATION_NAME };
       const next = dispatch(state, { type: "FetchFailed", ref: johnRef, reason: networkError });
-      expect(next).toEqual({ kind: "network-error", ref: johnRef, reason: networkError });
+      expect(next).toEqual({ kind: "network-error", ref: johnRef, reason: networkError, translationId: BSB_TRANSLATION_ID, translationName: BSB_TRANSLATION_NAME });
     });
 
     it("is a no-op when not loading", () => {
@@ -237,13 +271,13 @@ describe("readerReducer", () => {
     });
 
     it("is a no-op from loading", () => {
-      const state: ReaderState = { kind: "loading", ref: johnRef, intent: "view" };
+      const state: ReaderState = { kind: "loading", ref: johnRef, intent: "view", translationId: BSB_TRANSLATION_ID, translationName: BSB_TRANSLATION_NAME };
       const next = dispatch(state, { type: "ChapterAdvanced" });
       expect(next).toBe(state);
     });
 
     it("is a no-op from network-error", () => {
-      const state: ReaderState = { kind: "network-error", ref: johnRef, reason: networkError };
+      const state: ReaderState = { kind: "network-error", ref: johnRef, reason: networkError, translationId: BSB_TRANSLATION_ID, translationName: BSB_TRANSLATION_NAME };
       const next = dispatch(state, { type: "ChapterAdvanced" });
       expect(next).toBe(state);
     });
@@ -280,7 +314,7 @@ describe("readerReducer", () => {
     });
 
     it("is a no-op from loading", () => {
-      const state: ReaderState = { kind: "loading", ref: johnRef, intent: "view" };
+      const state: ReaderState = { kind: "loading", ref: johnRef, intent: "view", translationId: BSB_TRANSLATION_ID, translationName: BSB_TRANSLATION_NAME };
       const next = dispatch(state, { type: "ChapterRetreated" });
       expect(next).toBe(state);
     });
@@ -303,7 +337,7 @@ describe("readerReducer", () => {
     });
 
     it("transitions network-error → awaiting with cleared query, empty suggestions, selectedIndex -1", () => {
-      const state: ReaderState = { kind: "network-error", ref: johnRef, reason: networkError };
+      const state: ReaderState = { kind: "network-error", ref: johnRef, reason: networkError, translationId: BSB_TRANSLATION_ID, translationName: BSB_TRANSLATION_NAME };
       const next = dispatch(state, { type: "PaletteReopened" });
       expect(next).toEqual({
         kind: "awaiting",
@@ -323,7 +357,7 @@ describe("readerReducer", () => {
     });
 
     it("is a no-op from loading", () => {
-      const state: ReaderState = { kind: "loading", ref: johnRef, intent: "view" };
+      const state: ReaderState = { kind: "loading", ref: johnRef, intent: "view", translationId: BSB_TRANSLATION_ID, translationName: BSB_TRANSLATION_NAME };
       const next = dispatch(state, { type: "PaletteReopened" });
       expect(next).toBe(state);
     });
@@ -339,8 +373,8 @@ describe("readerReducer", () => {
 
     const nonLoadedStates: ReaderState[] = [
       { kind: "awaiting", query: "", parseError: null, suggestions: [], selectedIndex: -1, phase: "book", chapters: [], bookChosen: null },
-      { kind: "loading", ref: johnRef, intent: "view" },
-      { kind: "network-error", ref: johnRef, reason: networkError },
+      { kind: "loading", ref: johnRef, intent: "view", translationId: BSB_TRANSLATION_ID, translationName: BSB_TRANSLATION_NAME },
+      { kind: "network-error", ref: johnRef, reason: networkError, translationId: BSB_TRANSLATION_ID, translationName: BSB_TRANSLATION_NAME },
     ];
 
     for (const action of newActions) {
@@ -650,7 +684,7 @@ describe("readerReducer", () => {
   describe("PassageFetched (intent branches)", () => {
     it("opens versePicker when intent is pick-verse", () => {
       const passage = makePassage(21);
-      const state: ReaderState = { kind: "loading", ref: johnRef, intent: "pick-verse" };
+      const state: ReaderState = { kind: "loading", ref: johnRef, intent: "pick-verse", translationId: BSB_TRANSLATION_ID, translationName: BSB_TRANSLATION_NAME };
       const next = dispatch(state, { type: "PassageFetched", passage });
       if (next.kind !== "loaded") throw new Error("expected loaded");
       expect(next.versePicker).toEqual({ selectedIndex: 0 });
@@ -658,7 +692,7 @@ describe("readerReducer", () => {
 
     it("sets versePicker null when intent is view", () => {
       const passage = makePassage(21);
-      const state: ReaderState = { kind: "loading", ref: johnRef, intent: "view" };
+      const state: ReaderState = { kind: "loading", ref: johnRef, intent: "view", translationId: BSB_TRANSLATION_ID, translationName: BSB_TRANSLATION_NAME };
       const next = dispatch(state, { type: "PassageFetched", passage });
       if (next.kind !== "loaded") throw new Error("expected loaded");
       expect(next.versePicker).toBeNull();
