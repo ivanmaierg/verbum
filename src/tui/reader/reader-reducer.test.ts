@@ -596,6 +596,55 @@ describe("readerReducer", () => {
       if (next.kind !== "awaiting") throw new Error("expected awaiting");
       expect(next.phase).toBe("chapter");
     });
+
+    it("preserves chapter phase when the trailing space is deleted (query equals book name exactly)", () => {
+      // Bug: backspacing the trailing space after picking "John" used to drop
+      // the user out of chapter phase, hiding the chapter grid. Deleting the
+      // space alone is not a signal that the user wants to re-search books.
+      const state = makeAwaiting({
+        phase: "chapter",
+        bookChosen: { alias: "john", canonical: "JHN", displayName: "John" },
+        chapters: Array.from({ length: 21 }, (_, i) => i + 1),
+        selectedIndex: 0,
+        query: "John ",
+      });
+      const next = dispatch(state, { type: "QueryTyped", query: "John" });
+      if (next.kind !== "awaiting") throw new Error("expected awaiting");
+      expect(next.phase).toBe("chapter");
+      expect(next.bookChosen).not.toBeNull();
+      expect(next.chapters.length).toBe(21);
+    });
+
+    it("highlights the chapter when digits follow the book name without a space", () => {
+      // Bug follow-up: after deleting the trailing space, typing a digit
+      // produces "John1" (no space). The chapter grid should still highlight
+      // chapter 1, matching the "John 1" behavior.
+      const state = makeAwaiting({
+        phase: "chapter",
+        bookChosen: { alias: "john", canonical: "JHN", displayName: "John" },
+        chapters: Array.from({ length: 21 }, (_, i) => i + 1),
+        selectedIndex: 0,
+        query: "John",
+      });
+      const next = dispatch(state, { type: "QueryTyped", query: "John1" });
+      if (next.kind !== "awaiting") throw new Error("expected awaiting");
+      expect(next.phase).toBe("chapter");
+      expect(next.selectedIndex).toBe(0);
+    });
+
+    it("highlights chapter 10 for 'John10' (multi-digit, no space)", () => {
+      const state = makeAwaiting({
+        phase: "chapter",
+        bookChosen: { alias: "john", canonical: "JHN", displayName: "John" },
+        chapters: Array.from({ length: 21 }, (_, i) => i + 1),
+        selectedIndex: 0,
+        query: "John",
+      });
+      const next = dispatch(state, { type: "QueryTyped", query: "John10" });
+      if (next.kind !== "awaiting") throw new Error("expected awaiting");
+      expect(next.phase).toBe("chapter");
+      expect(next.selectedIndex).toBe(9);
+    });
   });
 
   describe("PassageFetched (intent branches)", () => {

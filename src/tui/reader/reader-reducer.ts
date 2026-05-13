@@ -47,25 +47,29 @@ export type ReaderAction =
 const handlers = {
   QueryTyped: (s: ReaderState, a: Extract<ReaderAction, { type: "QueryTyped" }>): ReaderState => {
     if (s.kind !== "awaiting") return s;
-    // Stay in chapter phase if the new query still has the chosen book's display
-    // name as a prefix. Without this, OpenTUI's controlled <input> kicks us out
-    // of chapter mode the instant SuggestionAccepted programmatically rewrites
-    // the query, because the value-prop change synthesizes an onInput event.
-    if (
-      s.phase === "chapter" &&
-      s.bookChosen !== null &&
-      a.query.toLowerCase().startsWith(`${s.bookChosen.displayName.toLowerCase()} `)
-    ) {
-      // Decode trailing digit suffix → grid selection. Multi-digit naturally works:
-      // "John 1" highlights chapter 1, "John 10" highlights chapter 10.
-      const suffix = a.query.slice(s.bookChosen.displayName.length + 1);
-      const digitMatch = /^(\d+)/.exec(suffix);
-      let selectedIndex = s.selectedIndex;
-      if (digitMatch) {
-        const n = parseInt(digitMatch[1], 10);
-        if (n >= 1 && n <= s.chapters.length) selectedIndex = n - 1;
+    // Stay in chapter phase when the new query is the chosen book's display
+    // name, optionally followed by a space and/or digits (e.g. "John", "John ",
+    // "John 1", "John1"). Deleting just the trailing space must NOT kick the
+    // user back to book phase — that hides the chapter grid mid-edit and is
+    // what produced the "sometimes the chapter menu doesn't show up" bug.
+    if (s.phase === "chapter" && s.bookChosen !== null) {
+      const dn = s.bookChosen.displayName.toLowerCase();
+      const q = a.query.toLowerCase();
+      if (q.startsWith(dn)) {
+        const rest = q.slice(dn.length);
+        if (rest === "" || rest.startsWith(" ") || /^\d/.test(rest)) {
+          // Decode digit suffix → grid selection. Optional space between name
+          // and digits; multi-digit naturally works ("John 10" / "John10").
+          const afterBook = a.query.slice(s.bookChosen.displayName.length);
+          const digitMatch = /^\s*(\d+)/.exec(afterBook);
+          let selectedIndex = s.selectedIndex;
+          if (digitMatch) {
+            const n = parseInt(digitMatch[1], 10);
+            if (n >= 1 && n <= s.chapters.length) selectedIndex = n - 1;
+          }
+          return { ...s, query: a.query, parseError: null, selectedIndex };
+        }
       }
-      return { ...s, query: a.query, parseError: null, selectedIndex };
     }
     // Book phase: re-suggest and auto-highlight the top match so Tab/Enter
     // accept the obvious choice without arrow-down first (fzf-style).
