@@ -34,6 +34,10 @@ export function isSpinnerEnabled(stream: NodeJS.WriteStream): boolean {
 
 // withLoading — wraps an async fn with a Braille spinner on stream (stderr).
 // TTY-false path: zero writes, zero overhead, fn result passed through unchanged.
+//   This is an UNCONDITIONAL no-op — we never paint a spinner into a pipe,
+//   regardless of FORCE_COLOR. Animated cursor returns into a non-TTY would
+//   corrupt downstream consumers (logs, captured stdout, CI buffers).
+// TTY-true path: still honors isSpinnerEnabled so NO_COLOR / FORCE_COLOR=0 can suppress.
 // TTY-true path: initial frame written before interval, cleanup in finally.
 // Result<T, E> transparency: never wraps, unwraps, or catches fn's value (R12).
 export async function withLoading<T>(
@@ -41,6 +45,9 @@ export async function withLoading<T>(
   fn: () => Promise<T>,
   options?: WithLoadingOptions,
 ): Promise<T> {
+  if (stream.isTTY !== true) {
+    return fn();
+  }
   if (!isSpinnerEnabled(stream)) {
     return fn();
   }
