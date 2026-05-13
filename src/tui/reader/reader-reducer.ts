@@ -13,6 +13,19 @@ export const VERSES_PER_PAGE = 15;
 
 type TranslationFields = { translationId: TranslationId; translationName: string };
 
+export function recomputeVisible(items: Translation[], query: string): Translation[] {
+  const q = query.trim().toLowerCase();
+  if (q === "") return items.slice(0, 50);
+  const out: Translation[] = [];
+  for (const t of items) {
+    if (`${t.name} ${t.languageEnglishName}`.toLowerCase().includes(q)) {
+      out.push(t);
+      if (out.length >= 50) break;
+    }
+  }
+  return out;
+}
+
 export function withTranslation<T extends TranslationFields>(base: T, src: TranslationFields): T {
   return { ...base, translationId: src.translationId, translationName: src.translationName };
 }
@@ -58,7 +71,15 @@ export type ReaderAction =
   | { type: "ChapterGridMovedUp" }
   | { type: "ChapterGridMovedDown" }
   | { type: "ChapterGridMovedLeft" }
-  | { type: "ChapterGridMovedRight" };
+  | { type: "ChapterGridMovedRight" }
+  | { type: "TranslationPickerOpened" }
+  | { type: "TranslationsFetched"; translations: Translation[] }
+  | { type: "TranslationFetchFailed" }
+  | { type: "TranslationPickerQueryTyped"; query: string }
+  | { type: "TranslationPickerMovedUp" }
+  | { type: "TranslationPickerMovedDown" }
+  | { type: "TranslationPickerAccepted" }
+  | { type: "TranslationPickerDismissed" };
 
 const handlers = {
   QueryTyped: (s: ReaderState, a: Extract<ReaderAction, { type: "QueryTyped" }>): ReaderState => {
@@ -315,6 +336,51 @@ const handlers = {
   ChapterGridMovedRight: (s: ReaderState, _a: Extract<ReaderAction, { type: "ChapterGridMovedRight" }>): ReaderState => {
     if (s.kind !== "awaiting" || s.phase !== "chapter" || s.chapters.length === 0) return s;
     return { ...s, selectedIndex: Math.min(s.selectedIndex + 1, s.chapters.length - 1) };
+  },
+
+  TranslationPickerOpened: (s: ReaderState, _a: Extract<ReaderAction, { type: "TranslationPickerOpened" }>): ReaderState => {
+    if (s.kind !== "loaded" || s.translationPicker !== null) return s;
+    return { ...s, translationPicker: { status: "loading", query: "", items: [], visibleItems: [], selectedIndex: 0 } };
+  },
+
+  TranslationsFetched: (s: ReaderState, a: Extract<ReaderAction, { type: "TranslationsFetched" }>): ReaderState => {
+    if (s.kind !== "loaded" || s.translationPicker === null) return s;
+    const visibleItems = recomputeVisible(a.translations, "");
+    return { ...s, translationPicker: { status: "ready", query: "", items: a.translations, visibleItems, selectedIndex: 0 } };
+  },
+
+  TranslationFetchFailed: (s: ReaderState, _a: Extract<ReaderAction, { type: "TranslationFetchFailed" }>): ReaderState => {
+    if (s.kind !== "loaded" || s.translationPicker === null) return s;
+    return { ...s, translationPicker: { ...s.translationPicker, status: "error" } };
+  },
+
+  TranslationPickerQueryTyped: (s: ReaderState, a: Extract<ReaderAction, { type: "TranslationPickerQueryTyped" }>): ReaderState => {
+    if (s.kind !== "loaded" || s.translationPicker === null) return s;
+    const visibleItems = recomputeVisible(s.translationPicker.items, a.query);
+    return { ...s, translationPicker: { ...s.translationPicker, query: a.query, visibleItems, selectedIndex: 0 } };
+  },
+
+  TranslationPickerMovedUp: (s: ReaderState, _a: Extract<ReaderAction, { type: "TranslationPickerMovedUp" }>): ReaderState => {
+    if (s.kind !== "loaded" || s.translationPicker === null || s.translationPicker.status !== "ready") return s;
+    return { ...s, translationPicker: { ...s.translationPicker, selectedIndex: Math.max(s.translationPicker.selectedIndex - 1, 0) } };
+  },
+
+  TranslationPickerMovedDown: (s: ReaderState, _a: Extract<ReaderAction, { type: "TranslationPickerMovedDown" }>): ReaderState => {
+    if (s.kind !== "loaded" || s.translationPicker === null || s.translationPicker.status !== "ready") return s;
+    const max = s.translationPicker.visibleItems.length - 1;
+    return { ...s, translationPicker: { ...s.translationPicker, selectedIndex: Math.min(s.translationPicker.selectedIndex + 1, max) } };
+  },
+
+  TranslationPickerAccepted: (s: ReaderState, _a: Extract<ReaderAction, { type: "TranslationPickerAccepted" }>): ReaderState => {
+    if (s.kind !== "loaded" || s.translationPicker === null || s.translationPicker.status !== "ready") return s;
+    if (s.translationPicker.visibleItems.length === 0) return s;
+    const chosen = s.translationPicker.visibleItems[s.translationPicker.selectedIndex]!;
+    return { kind: "loading", ref: s.ref, intent: "view", translationId: chosen.id, translationName: chosen.name };
+  },
+
+  TranslationPickerDismissed: (s: ReaderState, _a: Extract<ReaderAction, { type: "TranslationPickerDismissed" }>): ReaderState => {
+    if (s.kind !== "loaded" || s.translationPicker === null) return s;
+    return { ...s, translationPicker: null };
   },
 } satisfies {
   [K in ReaderAction["type"]]: (

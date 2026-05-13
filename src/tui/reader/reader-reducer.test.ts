@@ -8,6 +8,7 @@ import type { Reference } from "@/domain/reference";
 import { chaptersForBook } from "@/domain/book-chapters";
 import { DEFAULT_TRANSLATION_ID, makeTranslationId } from "@/domain/translations";
 import { withTranslation } from "@/tui/reader/reader-reducer";
+import type { Translation } from "@/domain/translations";
 
 const johnRef: Reference = {
   book: "JHN" as import("@/domain/book-id").BookId,
@@ -1041,6 +1042,245 @@ describe("readerReducer", () => {
       const next = dispatch(chapterState(0), { type: "ChapterGridMovedLeft" });
       if (next.kind !== "awaiting") throw new Error("expected awaiting");
       expect(next.selectedIndex).toBe(0);
+    });
+  });
+
+  const fakeTranslations: Translation[] = [
+    { id: makeTranslationId("KJV"), name: "King James Version", language: "en", languageEnglishName: "English", textDirection: "ltr" },
+    { id: makeTranslationId("LSG"), name: "Louis Segond", language: "fr", languageEnglishName: "French", textDirection: "ltr" },
+    { id: makeTranslationId("BSB"), name: "Berean Standard Bible", language: "en", languageEnglishName: "English", textDirection: "ltr" },
+  ];
+
+  function makeLoadedWithPicker(): ReaderState {
+    return {
+      kind: "loaded",
+      passage: mockPassage,
+      ref: johnRef,
+      cursorIndex: 0,
+      pageStartIndex: 0,
+      versePicker: null,
+      translationPicker: { status: "loading", query: "", items: [], visibleItems: [], selectedIndex: 0 },
+      translationId: BSB_TRANSLATION_ID,
+      translationName: BSB_TRANSLATION_NAME,
+    };
+  }
+
+  function makeLoadedReady(items = fakeTranslations): ReaderState {
+    return {
+      kind: "loaded",
+      passage: mockPassage,
+      ref: johnRef,
+      cursorIndex: 0,
+      pageStartIndex: 0,
+      versePicker: null,
+      translationPicker: { status: "ready", query: "", items, visibleItems: items.slice(0, 50), selectedIndex: 0 },
+      translationId: BSB_TRANSLATION_ID,
+      translationName: BSB_TRANSLATION_NAME,
+    };
+  }
+
+  describe("TranslationPickerOpened", () => {
+    it("sets translationPicker to loading state when loaded + no picker", () => {
+      const state = makeLoaded(mockPassage, 0, 0);
+      const next = dispatch(state, { type: "TranslationPickerOpened" });
+      if (next.kind !== "loaded") throw new Error("expected loaded");
+      expect(next.translationPicker).toEqual({ status: "loading", query: "", items: [], visibleItems: [], selectedIndex: 0 });
+    });
+
+    it("is a no-op in awaiting", () => {
+      const next = dispatch(initialReaderState, { type: "TranslationPickerOpened" });
+      expect(next).toBe(initialReaderState);
+    });
+
+    it("is a no-op in loading", () => {
+      const state: ReaderState = makeLoading();
+      const next = dispatch(state, { type: "TranslationPickerOpened" });
+      expect(next).toBe(state);
+    });
+
+    it("is a no-op in network-error", () => {
+      const state: ReaderState = { kind: "network-error", ref: johnRef, reason: networkError, translationId: BSB_TRANSLATION_ID, translationName: BSB_TRANSLATION_NAME };
+      const next = dispatch(state, { type: "TranslationPickerOpened" });
+      expect(next).toBe(state);
+    });
+  });
+
+  describe("TranslationsFetched", () => {
+    it("sets status to ready with sorted items and selectedIndex 0", () => {
+      const state = makeLoadedWithPicker();
+      const next = dispatch(state, { type: "TranslationsFetched", translations: fakeTranslations });
+      if (next.kind !== "loaded") throw new Error("expected loaded");
+      expect(next.translationPicker?.status).toBe("ready");
+      expect(next.translationPicker?.selectedIndex).toBe(0);
+    });
+
+    it("caps visibleItems at 50", () => {
+      const many: Translation[] = Array.from({ length: 100 }, (_, i) => ({
+        id: makeTranslationId(`T${i}`),
+        name: `Translation ${i}`,
+        language: "en",
+        languageEnglishName: "English",
+        textDirection: "ltr" as const,
+      }));
+      const state = makeLoadedWithPicker();
+      const next = dispatch(state, { type: "TranslationsFetched", translations: many });
+      if (next.kind !== "loaded") throw new Error("expected loaded");
+      expect(next.translationPicker?.visibleItems.length).toBeLessThanOrEqual(50);
+    });
+
+    it("is a no-op when picker is null", () => {
+      const state = makeLoaded(mockPassage, 0, 0);
+      const next = dispatch(state, { type: "TranslationsFetched", translations: fakeTranslations });
+      expect(next).toBe(state);
+    });
+  });
+
+  describe("TranslationFetchFailed", () => {
+    it("sets status to error when picker is loading", () => {
+      const state = makeLoadedWithPicker();
+      const next = dispatch(state, { type: "TranslationFetchFailed" });
+      if (next.kind !== "loaded") throw new Error("expected loaded");
+      expect(next.translationPicker?.status).toBe("error");
+    });
+
+    it("is a no-op when picker is null", () => {
+      const state = makeLoaded(mockPassage, 0, 0);
+      const next = dispatch(state, { type: "TranslationFetchFailed" });
+      expect(next).toBe(state);
+    });
+  });
+
+  describe("TranslationPickerQueryTyped", () => {
+    it("updates query and recomputes visibleItems, resets selectedIndex to 0", () => {
+      const state = makeLoadedReady();
+      const next = dispatch(state, { type: "TranslationPickerQueryTyped", query: "king" });
+      if (next.kind !== "loaded") throw new Error("expected loaded");
+      expect(next.translationPicker?.query).toBe("king");
+      expect(next.translationPicker?.selectedIndex).toBe(0);
+      const names = next.translationPicker?.visibleItems.map((t) => t.name) ?? [];
+      expect(names).toContain("King James Version");
+    });
+
+    it("empty query returns first 50 items", () => {
+      const state = makeLoadedReady();
+      const next = dispatch(state, { type: "TranslationPickerQueryTyped", query: "" });
+      if (next.kind !== "loaded") throw new Error("expected loaded");
+      expect(next.translationPicker?.visibleItems.length).toBe(fakeTranslations.length);
+    });
+
+    it("is a no-op when picker is null", () => {
+      const state = makeLoaded(mockPassage, 0, 0);
+      const next = dispatch(state, { type: "TranslationPickerQueryTyped", query: "test" });
+      expect(next).toBe(state);
+    });
+  });
+
+  describe("TranslationPickerMovedUp", () => {
+    it("decrements selectedIndex, clamped to 0", () => {
+      const state = makeLoadedReady();
+      if (state.kind !== "loaded" || !state.translationPicker) throw new Error();
+      const withIdx = { ...state, translationPicker: { ...state.translationPicker, selectedIndex: 2 } } as ReaderState;
+      const next = dispatch(withIdx, { type: "TranslationPickerMovedUp" });
+      if (next.kind !== "loaded") throw new Error("expected loaded");
+      expect(next.translationPicker?.selectedIndex).toBe(1);
+    });
+
+    it("clamps at 0", () => {
+      const next = dispatch(makeLoadedReady(), { type: "TranslationPickerMovedUp" });
+      if (next.kind !== "loaded") throw new Error("expected loaded");
+      expect(next.translationPicker?.selectedIndex).toBe(0);
+    });
+
+    it("is a no-op when picker is null", () => {
+      const state = makeLoaded(mockPassage, 0, 0);
+      const next = dispatch(state, { type: "TranslationPickerMovedUp" });
+      expect(next).toBe(state);
+    });
+
+    it("is a no-op when picker is not ready", () => {
+      const state = makeLoadedWithPicker();
+      const next = dispatch(state, { type: "TranslationPickerMovedUp" });
+      expect(next).toBe(state);
+    });
+  });
+
+  describe("TranslationPickerMovedDown", () => {
+    it("increments selectedIndex", () => {
+      const next = dispatch(makeLoadedReady(), { type: "TranslationPickerMovedDown" });
+      if (next.kind !== "loaded") throw new Error("expected loaded");
+      expect(next.translationPicker?.selectedIndex).toBe(1);
+    });
+
+    it("clamps at visibleItems.length - 1", () => {
+      const state = makeLoadedReady();
+      if (state.kind !== "loaded" || !state.translationPicker) throw new Error();
+      const lastIdx = state.translationPicker.visibleItems.length - 1;
+      const withMax = { ...state, translationPicker: { ...state.translationPicker, selectedIndex: lastIdx } } as ReaderState;
+      const next = dispatch(withMax, { type: "TranslationPickerMovedDown" });
+      if (next.kind !== "loaded") throw new Error("expected loaded");
+      expect(next.translationPicker?.selectedIndex).toBe(lastIdx);
+    });
+
+    it("is a no-op when picker is null", () => {
+      const state = makeLoaded(mockPassage, 0, 0);
+      const next = dispatch(state, { type: "TranslationPickerMovedDown" });
+      expect(next).toBe(state);
+    });
+
+    it("is a no-op when picker is not ready", () => {
+      const state = makeLoadedWithPicker();
+      const next = dispatch(state, { type: "TranslationPickerMovedDown" });
+      expect(next).toBe(state);
+    });
+  });
+
+  describe("TranslationPickerAccepted", () => {
+    it("transitions to loading with chosen translation's id and name", () => {
+      const state = makeLoadedReady();
+      const next = dispatch(state, { type: "TranslationPickerAccepted" });
+      expect(next.kind).toBe("loading");
+      if (next.kind !== "loading") return;
+      const first = fakeTranslations[0]!;
+      expect(String(next.translationId)).toBe(String(first.id));
+      expect(next.translationName).toBe(first.name);
+    });
+
+    it("is a no-op when picker is null", () => {
+      const state = makeLoaded(mockPassage, 0, 0);
+      const next = dispatch(state, { type: "TranslationPickerAccepted" });
+      expect(next).toBe(state);
+    });
+
+    it("is a no-op when status is not ready", () => {
+      const state = makeLoadedWithPicker();
+      const next = dispatch(state, { type: "TranslationPickerAccepted" });
+      expect(next).toBe(state);
+    });
+
+    it("is a no-op when visibleItems is empty", () => {
+      const state = makeLoadedReady([]);
+      const next = dispatch(state, { type: "TranslationPickerAccepted" });
+      expect(next).toBe(state);
+    });
+  });
+
+  describe("TranslationPickerDismissed", () => {
+    it("sets translationPicker to null", () => {
+      const state = makeLoadedWithPicker();
+      const next = dispatch(state, { type: "TranslationPickerDismissed" });
+      if (next.kind !== "loaded") throw new Error("expected loaded");
+      expect(next.translationPicker).toBeNull();
+    });
+
+    it("is a no-op when picker is already null", () => {
+      const state = makeLoaded(mockPassage, 0, 0);
+      const next = dispatch(state, { type: "TranslationPickerDismissed" });
+      expect(next).toBe(state);
+    });
+
+    it("is a no-op in awaiting", () => {
+      const next = dispatch(initialReaderState, { type: "TranslationPickerDismissed" });
+      expect(next).toBe(initialReaderState);
     });
   });
 });
