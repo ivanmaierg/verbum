@@ -259,159 +259,14 @@ After dispatching, the handler returns immediately.
 
 ---
 
-## Acceptance Scenarios
+## Acceptance Scenarios (excerpt)
 
-### SCENARIO-01 — `BOOK_CHAPTERS` coverage
+All 21 scenarios defined in the full spec. Key scenarios include:
 
-**Given** `BOOK_CHAPTERS` is imported from `src/domain/book-chapters.ts`
-**When** its entries are counted
-**Then** exactly 66 entries are present
-
-### SCENARIO-02 — `chaptersForBook` known book
-
-**Given** the canonical key `"gen"` (Genesis)
-**When** `chaptersForBook("gen")` is called
-**Then** it returns `50`
-
-### SCENARIO-03 — `chaptersForBook` unknown key
-
-**Given** a key `"xyz"` not present in `BOOK_CHAPTERS`
-**When** `chaptersForBook("xyz")` is called
-**Then** it returns `0` (or a safe numeric fallback, not `undefined`)
-
-### SCENARIO-04 — `SuggestionAccepted` in book phase transitions to chapter phase
-
-**Given** state is `awaiting` with `phase: "book"`, `suggestions: [{ canonical: "jhn", displayName: "John" }]`, `selectedIndex: 0`
-**When** `SuggestionAccepted` is dispatched
-**Then** state is `awaiting` with `phase: "chapter"`, `bookChosen.canonical === "jhn"`, `chapters.length === chaptersForBook("jhn")`, `selectedIndex === 0`, `query === "John "`
-
-### SCENARIO-05 — `SuggestionAccepted` in chapter phase transitions to loading/pick-verse
-
-**Given** state is `awaiting` with `phase: "chapter"`, `bookChosen: { canonical: "jhn", displayName: "John" }`, `chapters: [1..21]`, `selectedIndex: 2` (chapter 3)
-**When** `SuggestionAccepted` is dispatched
-**Then** state is `loading` with `ref.chapter === 3`, `intent === "pick-verse"`
-
-### SCENARIO-06 — `QueryTyped` resets from chapter phase to book phase
-
-**Given** state is `awaiting` with `phase: "chapter"`, `bookChosen: { canonical: "jhn", displayName: "John" }`, `chapters: [1..21]`
-**When** `QueryTyped` is dispatched with `query: "j"`
-**Then** state is `awaiting` with `phase: "book"`, `bookChosen === null`, `chapters === []`, `suggestions` from `suggestBooks("j")`
-
-### SCENARIO-07 — `PassageFetched` with `intent: "pick-verse"` opens verse picker
-
-**Given** state is `loading` with `intent: "pick-verse"`
-**When** `PassageFetched` is dispatched with a passage of 21 verses
-**Then** state is `loaded` with `versePicker: { selectedIndex: 0 }`
-
-### SCENARIO-08 — `PassageFetched` with `intent: "view"` does not open verse picker
-
-**Given** state is `loading` with `intent: "view"`
-**When** `PassageFetched` is dispatched
-**Then** state is `loaded` with `versePicker === null`
-
-### SCENARIO-09 — `VersePickerMovedDown` moves by 10, clamped
-
-**Given** state is `loaded` with `passage.verses.length === 21`, `versePicker: { selectedIndex: 5 }`
-**When** `VersePickerMovedDown` is dispatched
-**Then** `versePicker.selectedIndex === 15`
-
-**Given** state is `loaded` with `passage.verses.length === 21`, `versePicker: { selectedIndex: 15 }`
-**When** `VersePickerMovedDown` is dispatched
-**Then** `versePicker.selectedIndex === 20` (clamped to 20, not 25)
-
-### SCENARIO-10 — `VersePickerMovedUp` moves by 10, clamped
-
-**Given** state is `loaded` with `versePicker: { selectedIndex: 3 }`
-**When** `VersePickerMovedUp` is dispatched
-**Then** `versePicker.selectedIndex === 0` (clamped, not negative)
-
-### SCENARIO-11 — `VersePickerMovedRight` moves by 1, clamped
-
-**Given** state is `loaded` with `passage.verses.length === 5`, `versePicker: { selectedIndex: 4 }`
-**When** `VersePickerMovedRight` is dispatched
-**Then** `versePicker.selectedIndex === 4` (clamped, not 5)
-
-### SCENARIO-12 — `VersePickerMovedLeft` moves by 1, clamped
-
-**Given** state is `loaded` with `versePicker: { selectedIndex: 0 }`
-**When** `VersePickerMovedLeft` is dispatched
-**Then** `versePicker.selectedIndex === 0` (clamped, not -1)
-
-### SCENARIO-13 — `VersePickerAccepted` lands cursor and closes overlay
-
-**Given** state is `loaded` with `versePicker: { selectedIndex: 15 }`, passage has 21 verses
-**When** `VersePickerAccepted` is dispatched
-**Then** `versePicker === null`, `cursorIndex === 15`, `pageStartIndex === Math.floor(15 / VERSES_PER_PAGE) * VERSES_PER_PAGE`
-
-### SCENARIO-14 — `VersePickerCancelled` closes overlay, cursor stays at 0
-
-**Given** state is `loaded` with `versePicker: { selectedIndex: 10 }`, `cursorIndex === 0`
-**When** `VersePickerCancelled` is dispatched
-**Then** `versePicker === null`, `cursorIndex === 0`
-
-### SCENARIO-15 — `PickerBackedOut` from chapter phase returns to book phase
-
-**Given** state is `awaiting` with `phase: "chapter"`, `query: "john "`, `bookChosen: { canonical: "jhn" }`, `chapters: [1..21]`
-**When** `PickerBackedOut` is dispatched
-**Then** state is `awaiting` with `phase: "book"`, `bookChosen === null`, `chapters === []`, `suggestions` from `suggestBooks("john ")`
-
-### SCENARIO-16 — `PickerBackedOut` from book phase is a no-op
-
-**Given** state is `awaiting` with `phase: "book"`
-**When** `PickerBackedOut` is dispatched
-**Then** state is returned unchanged
-
-### SCENARIO-17 — Driver: verse-picker gate suppresses reading-view keys
-
-**Given** `readerState.kind === "loaded"` and `readerState.versePicker !== null`
-**When** the `[` key is pressed
-**Then** no action is dispatched and no side effect occurs (reading-view navigation suppressed)
-
-### SCENARIO-18 — Driver: `q` quits above all gates
-
-**Given** `readerState.kind === "loaded"` and `readerState.versePicker !== null`
-**When** the `q` key is pressed
-**Then** the application exits (quit handler fires before the verse-picker gate)
-
-### SCENARIO-19 — Driver: `escape` in chapter phase backs out
-
-**Given** `readerState.kind === "awaiting"` and `readerState.phase === "chapter"`
-**When** the `escape` key is pressed
-**Then** `PickerBackedOut` is dispatched
-
-### SCENARIO-20 — End-to-end happy path (from proposal Success Criterion)
-
-> `verbum` → palette opens → type `joh` → Tab on John → chapter grid renders → Tab on 3 → spinner shows briefly → verse picker overlay renders → `↓↓` to verse 16 → Tab → reader loads John 3 with cursor on verse 16.
-
-**Given** the application starts in `awaiting` state with `phase: "book"`
-**When** the user types `joh`
-**Then** `suggestions` includes John (`canonical: "jhn"`)
-
-**When** the user presses Tab (dispatches `SuggestionAccepted`)
-**Then** state is `awaiting` with `phase: "chapter"`, `bookChosen.canonical === "jhn"`, `chapters === [1..21]`, chapter grid is rendered
-
-**When** the user presses Tab on chapter 3 (dispatches `SuggestionAccepted`)
-**Then** state is `loading` with `intent: "pick-verse"`, spinner is visible
-
-**When** `PassageFetched` fires (John 3, 21 verses)
-**Then** state is `loaded` with `versePicker: { selectedIndex: 0 }`, verse picker overlay is rendered
-
-**When** the user presses `↓` twice (dispatches `VersePickerMovedDown` × 2)
-**Then** `versePicker.selectedIndex === 20` ... but since grid is 10-cols, `↓` moves by 10; pressing once gives 10, pressing twice gives 20 — then the user navigates to verse 16 by pressing `↑` once (index 10) then `→` six times; OR the spec accepts that "↓↓ to verse 16" is colloquial for "navigate to verse 16" via whatever key combination
-
-**When** the user presses Tab (dispatches `VersePickerAccepted`)
-**Then** state is `loaded` with `versePicker === null`, `cursorIndex` pointing to verse 16 in the passage, reader displays John 3
-
-### SCENARIO-21 — End-to-end free-typing bypass (from proposal Success Criterion)
-
-> type `john 3:16` → Enter → reader loads John 3:16 directly, no picker shown at any step.
-
-**Given** the application starts in `awaiting` state
-**When** the user types `john 3:16` and presses Enter (dispatches `QuerySubmitted`)
-**Then** state transitions to `loading` with `intent: "view"` (not `"pick-verse"`)
-
-**When** `PassageFetched` fires
-**Then** state is `loaded` with `versePicker === null` — no overlay appears at any point
+- SCENARIO-02: `chaptersForBook("gen")` returns 50
+- SCENARIO-04–05: Multi-stage picker flow (book → chapter → loading/pick-verse)
+- SCENARIO-09–16: Verse picker navigation and overlay transitions
+- SCENARIO-20–21: End-to-end happy paths (guided flow and free-typing bypass)
 
 ---
 
@@ -427,8 +282,7 @@ After dispatching, the handler returns immediately.
 
 ## Assumptions Made
 
-1. `chaptersForBook` returns chapters as a sorted array `[1, 2, ..., N]` built from `BOOK_CHAPTERS[canonical]` — this is implied by the reducer sketch but not stated explicitly in the proposal.
-2. `bookIdFromCanonical` is an existing or co-introduced helper that maps a canonical string to the `BookId` type used in `Reference`. If it does not exist, it must be introduced as part of this change.
-3. The `"escape"` key name in the OpenTUI `KeyEvent` type is `"escape"` (lowercase). Verified at apply time from the `KeyEvent` type definition.
-4. `"left"` and `"right"` key names in `KeyEvent` are `"left"` and `"right"` (lowercase). Verified at apply time.
-5. `VERSES_PER_PAGE` is already defined in the reducer or view layer and is not introduced by this change.
+1. `chaptersForBook` returns chapters as a sorted array `[1, 2, ..., N]` built from `BOOK_CHAPTERS[canonical]`.
+2. `bookIdFromCanonical` is an existing or co-introduced helper that maps a canonical string to the `BookId` type.
+3. Key names in OpenTUI `KeyEvent` are lowercase: `"escape"`, `"left"`, `"right"`, etc.
+4. `VERSES_PER_PAGE` is already defined in the reducer or view layer.

@@ -167,127 +167,23 @@ simplify: `isSpinnerEnabled` deliberately duplicates `isColorEnabled` rather tha
 
 Follows the structure of `src/cli/ansi.test.ts` exactly: `describe` blocks, `beforeEach`/`afterEach` for env-var save/restore, fake streams cast from POJOs.
 
-Imports:
-
-```ts
-import { describe, it, expect, beforeEach, afterEach } from "bun:test";
-import { withLoading, isSpinnerEnabled, SPINNER_FRAMES } from "./loading";
-```
-
-Fake-stream factory (one helper, defined once per file):
-
-```ts
-type WriteCall = string;
-function fakeStream(isTTY: boolean): {
-  stream: NodeJS.WriteStream;
-  writes: WriteCall[];
-} {
-  const writes: WriteCall[] = [];
-  const stream = {
-    isTTY,
-    write: ((chunk: string | Uint8Array) => {
-      writes.push(typeof chunk === "string" ? chunk : Buffer.from(chunk).toString());
-      return true;
-    }) as NodeJS.WriteStream["write"],
-  } as NodeJS.WriteStream;
-  return { stream, writes };
-}
-```
-
-Test groups:
-
-**Group 1 — `isSpinnerEnabled` truth table** (mirrors `ansi.test.ts` T1-T9):
-
-| ID | Stream | NO_COLOR | FORCE_COLOR | Expect |
-|----|--------|----------|-------------|--------|
-| S1 | TTY    | unset    | unset       | `true`  |
-| S2 | pipe   | unset    | unset       | `false` |
-| S3 | TTY    | `"1"`    | unset       | `false` |
-| S4 | TTY    | `""`     | unset       | `true` (empty = no opinion) |
-| S5 | pipe   | unset    | `"1"`       | `true` (override) |
-| S6 | TTY    | unset    | `"0"`       | `false` |
-| S7 | TTY    | unset    | `"false"`   | `false` |
-| S8 | pipe   | `"1"`    | `"1"`       | `false` (NO_COLOR wins) |
-
-Use the same `beforeEach`/`afterEach` env-var save/restore block as `ansi.test.ts:36-57`.
-
-**Group 2 — `withLoading` TTY-false path (no-op)**:
-
-- `T-NOOP-1`: `isTTY=false`, fn returns `42` immediately → no writes recorded, fn called exactly once, result is `42`. Use `interval: 1_000_000` defensively (interval should never start, but in case of a bug we want zero risk of ticks).
-- `T-NOOP-2`: `isTTY=false`, fn returns `{ ok: true, value: "x" } as const` (Result shape) → result passes through with referential equality.
-
-**Group 3 — `withLoading` TTY-true path (renders + cleans up)**:
-
-- `T-TTY-1`: `isTTY=true`, fn resolves with `7`, `interval: 1_000_000` (no tick fires during the test). Assert:
-  - `writes.length >= 2` (initial render + cleanup)
-  - `writes[0] === "\r" + SPINNER_FRAMES[0]` (initial render)
-  - `writes[writes.length - 1] === "\r \r"` (cleanup sequence — `\r` + 1 space + `\r`)
-  - returned value === `7`
-- `T-TTY-2`: same setup but `interval: 1`, fn awaits one microtask before resolving. Assert cleanup is still the last write. (This is the "real-tick survival" test — kept simple to avoid timing flakiness.)
-
-**Group 4 — `withLoading` rejection path**:
-
-- `T-REJECT-1`: `isTTY=true`, fn rejects with `new Error("nope")`. Assert:
-  - the test awaits `withLoading` inside `expect(...).rejects.toThrow("nope")` (Bun supports this)
-  - after the rejection settles, inspect `writes`: last entry is `"\r \r"` (cleanup ran before rejection propagated)
-
-**Group 5 — frame array shape**:
-
-- `T-FRAMES-1`: `SPINNER_FRAMES.length === 10`
-- `T-FRAMES-2`: every frame is a single grapheme (string length 1 in JS for these Braille code points — they are all in the BMP, single code units)
-
-Total: ~14-16 `it` blocks, well under 100 lines.
+Test groups cover:
+- `isSpinnerEnabled` truth table (TTY/env-var combinations)
+- `withLoading` TTY-false path (no-op)
+- `withLoading` TTY-true path (renders + cleans up)
+- `withLoading` rejection path
+- Frame array shape validation
 
 ### Smoke coverage — extend `tests/vod-smoke.test.ts`
 
-Decision: **extend `tests/vod-smoke.test.ts`** rather than create `tests/loading-smoke.test.ts`. Rationale: the existing file already monkey-patches `process.stderr.write` and runs `runVod` end-to-end. A new file would duplicate the harness for a single assertion. One additional `describe` block keeps the smoke surface flat.
-
-Add this block to `tests/vod-smoke.test.ts`:
-
-```ts
-describe("smoke — verbum vod loading state is invisible to redirected pipelines", () => {
-  it("captured stderr contains no spinner frames when isTTY is false", async () => {
-    // Fixed date so the picker is deterministic; stubRepo resolves synchronously.
-    const fixed = new Date(2025, 5, 15);
-
-    // Force the no-spinner path: NO_COLOR=1 disables isSpinnerEnabled regardless of isTTY.
-    const savedNoColor = process.env.NO_COLOR;
-    process.env.NO_COLOR = "1";
-
-    let stderrCapture = "";
-    const origStderr = process.stderr.write.bind(process.stderr);
-    process.stderr.write = ((chunk: string | Uint8Array) => {
-      stderrCapture += typeof chunk === "string" ? chunk : Buffer.from(chunk).toString();
-      return true;
-    }) as typeof process.stderr.write;
-
-    try {
-      await runVod(fixed, stubRepo);
-    } finally {
-      process.stderr.write = origStderr;
-      if (savedNoColor === undefined) delete process.env.NO_COLOR;
-      else process.env.NO_COLOR = savedNoColor;
-    }
-
-    // Spinner frames and the cleanup sequence must NOT appear in captured stderr.
-    for (const frame of ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]) {
-      expect(stderrCapture).not.toContain(frame);
-    }
-    expect(stderrCapture).not.toContain("\r");
-  });
-});
-```
-
-Why `NO_COLOR=1` instead of `isTTY=false`: `process.stderr.isTTY` is a runtime property of the global process object that we cannot safely mutate in-test without risking pollution. `NO_COLOR=1` flips `isSpinnerEnabled` to `false` via the env-var path with no side effects on the global stream object. The env var is saved/restored in `finally`.
-
-There is no smoke test that proves the spinner **does** render — the smoke harness cannot simulate a TTY without a real PTY, which is out of scope for `bun test`. The unit tests in Group 3 cover that path via fake streams. This is the same trade-off `ansi.test.ts` makes for `isColorEnabled`.
+Decision: **extend `tests/vod-smoke.test.ts`** rather than create `tests/loading-smoke.test.ts`. One additional `describe` block keeps the smoke surface flat.
 
 ## File-by-file Change Plan
 
 | File | Action | Specifics |
 |------|--------|-----------|
 | `src/cli/loading.ts` | NEW (~50 lines) | Exports `SPINNER_FRAMES` (`as const`), `WithLoadingOptions`, `SpinnerFrame`, `isSpinnerEnabled`, `withLoading`. Internal: cleanup helper inlined into `finally`. |
-| `src/cli/loading.test.ts` | NEW (~80 lines) | Groups 1-5 above. Reuses env-var save/restore pattern from `ansi.test.ts`. |
+| `src/cli/loading.test.ts` | NEW (~80 lines) | Truth table + withLoading path tests. Reuses env-var save/restore pattern from `ansi.test.ts`. |
 | `src/cli/run.ts` | MODIFY | Add `import { withLoading } from "@/cli/loading";` after the existing `@/cli/render` import. Change line 39 from `const passageResult = await getPassage(repo, refResult.value);` to `const passageResult = await withLoading(process.stderr, () => getPassage(repo, refResult.value));`. |
 | `src/cli/vod.ts` | MODIFY | Add `import { withLoading } from "@/cli/loading";` after the existing `@/cli/render` import. Change line 40 from `const passageResult = await getPassage(repo, ref);` to `const passageResult = await withLoading(process.stderr, () => getPassage(repo, ref));`. |
 | `tests/vod-smoke.test.ts` | MODIFY | Append one `describe` block (the loading-state smoke assertion above). No change to existing test bodies. |

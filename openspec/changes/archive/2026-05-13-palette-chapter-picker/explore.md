@@ -101,111 +101,80 @@ QueryTyped: (s, a) => {
     bookChosen: null,
     chapters: [],
     query: a.query,
-    parseError: null,
     suggestions: suggestBooks(a.query),
-    selectedIndex: -1,
   };
 },
 ```
 
 ## View
 
-- `phase: "book"`: existing suggestion list.
-- `phase: "chapter"`: numeric grid below the input. Selected cell in accent. Title shows chosen book.
-- `loaded` with `versePicker !== null`: overlay box over the dimmed reading view. Same numeric grid pattern. Esc cancels, Enter/Tab accepts.
+`NumberGrid` component (reusable):
+```ts
+type NumberGridProps = {
+  numbers: number[];
+  selectedIndex: number;
+  onSelect?: (index: number) => void;
+  cols?: number; // default 10
+};
+```
 
-Grid rendering helper:
+Renders `numbers` in rows of `cols`, selected cell fg=ACCENT_HEX + ▶ prefix.
 
-```tsx
-function NumberGrid({ numbers, selectedIndex, columns = 10 }) {
-  const rows: number[][] = [];
-  for (let i = 0; i < numbers.length; i += columns) {
-    rows.push(numbers.slice(i, i + columns));
-  }
-  return (
-    <box flexDirection="column">
-      {rows.map((row, ri) => (
-        <text key={ri}>
-          {row.map((n, ci) => {
-            const idx = ri * columns + ci;
-            const focused = idx === selectedIndex;
-            return (
-              <span key={n} fg={focused ? ACCENT_HEX : undefined}>
-                {focused ? `▶ ${String(n).padStart(2)}  ` : `  ${String(n).padStart(2)}  `}
-              </span>
-            );
-          })}
-        </text>
-      ))}
-    </box>
-  );
+`bottomTitleFor` gains branch:
+```ts
+if (readerState.kind === "awaiting" && readerState.phase === "chapter") {
+  const bookName = readerState.bookChosen?.displayName || "?";
+  return `${bookName} — Pick a chapter`;
 }
 ```
 
-## Driver Keybind Changes
-
-Current `awaiting` gate works for both `phase: "book"` and `phase: "chapter"` since the action handlers branch on `phase`. No driver change there.
-
-But we now need keybinds for verse picker (in `loaded` state when `versePicker !== null`):
-- `↑`/`↓`/`←`/`→` → `VersePickerMovedUp/Down/Left/Right`
-- `Tab` or `Enter` → `VersePickerAccepted`
-- `Esc` → `VersePickerCancelled`
-- Reading view's existing keybinds (`[`/`]`/`n`/`p`/`/`) must be GATED OFF when `versePicker !== null`
-
-Driver gate addition:
+And for verse picker:
 ```ts
 if (readerState.kind === "loaded" && readerState.versePicker !== null) {
-  if (keyEvent.name === "up")     { dispatch({ type: "VersePickerMovedUp" }); return; }
-  if (keyEvent.name === "down")   { dispatch({ type: "VersePickerMovedDown" }); return; }
-  if (keyEvent.name === "left")   { dispatch({ type: "VersePickerMovedLeft" }); return; }
-  if (keyEvent.name === "right")  { dispatch({ type: "VersePickerMovedRight" }); return; }
-  if (keyEvent.name === "tab")    { dispatch({ type: "VersePickerAccepted" }); return; }
-  if (keyEvent.name === "return") { dispatch({ type: "VersePickerAccepted" }); return; }
-  if (keyEvent.name === "escape") { dispatch({ type: "VersePickerCancelled" }); return; }
-  return; // suppress everything else
+  return "Pick a verse";
 }
 ```
 
-`q`/`Q` quit still sits above and wins.
+## Driver
 
-## Approaches Considered
+New gate at top of loaded-state keybinds:
 
-| Approach | Pros | Cons |
-|---|---|---|
-| Hardcoded verse-count table (1189 entries) | No fetch latency | ~30KB data file; maintenance if any translation differs |
-| **Lazy verse list from fetched passage (chosen)** | Zero data commitment; verse count is authoritative for the loaded translation | One extra spinner between chapter pick and verse picker |
-| No verse picker (chapter pick loads immediately, cursor on verse 1) | Simplest | Doesn't satisfy "verse pick" requirement |
+```ts
+if (readerState.kind === "loaded" && readerState.versePicker !== null) {
+  if (["up", "down", "left", "right"].includes(keyEvent.name)) {
+    // dispatch move action
+  }
+  if (["tab", "return"].includes(keyEvent.name)) {
+    // dispatch VersePickerAccepted
+  }
+  if (keyEvent.name === "escape") {
+    // dispatch VersePickerCancelled
+  }
+  return; // suppress all other keys
+}
+```
 
-## Slicing
+For chapter phase:
+```ts
+if (readerState.kind === "awaiting" && readerState.phase === "chapter") {
+  if (keyEvent.name === "escape") {
+    dispatch({ type: "PickerBackedOut" });
+    return;
+  }
+}
+```
 
-One PR, estimated:
+## Enter vs Tab
 
-| File | Lines |
-|------|-------|
-| `src/domain/book-chapters.ts` (new) | ~70 |
-| `src/domain/book-chapters.test.ts` (new) | ~25 |
-| `src/tui/reader/reader-reducer.ts` | ~80 (phase + intent + versePicker + 6 new actions + existing handlers updated) |
-| `src/tui/reader/reader-reducer.test.ts` | ~80 (existing awaiting tests need `phase: "book"`, `chapters: []`, `bookChosen: null`; new tests for all new transitions) |
-| `src/tui/reader/reader-screen.tsx` | ~50 (chapter grid render, verse picker overlay, NumberGrid helper) |
-| `src/tui/tui-driver.tsx` | ~15 (versePicker-mode gate) |
-| **Total** | **~320 lines** |
+Tab = SuggestionAccepted (picker accept). Enter = QuerySubmitted (parse typed ref). If query is "John " without chapter, parseReference returns malformed error — same path as today.
 
-Under 400-line budget but close. If the budget gets tight, the NumberGrid helper extracts to its own component file.
+## Line budget
 
-## Risks
+~235 lines total across 5 files. Under 400-line budget. Single PR appropriate.
 
-1. **`makeAwaiting` and `initialReaderState` shape change** — every test that builds an `awaiting` state needs `phase: "book"`, `chapters: []`, `bookChosen: null` added. ~12 test sites, mechanical.
-2. **`loaded` shape change** — `versePicker: null` added. Existing `loaded` tests need the field.
-3. **Verse picker grid keybinds** — `Left`/`Right` arrow keys aren't currently handled anywhere. Verify they exist in OpenTUI key event names (almost certainly `"left"` / `"right"` per the `KeyHandler` convention).
-4. **Free-typing edge case** — when in `phase: "chapter"`, if user types a digit, our `QueryTyped` drops back to `phase: "book"`. The query becomes "John 3" (input had "John " + user typed "3"). `suggestBooks("John 3")` matches nothing — empty suggestions. On Enter, `parseReference` parses it correctly as John 3. Works.
-5. **Esc keybind** — currently unused. Confirm `keyEvent.name === "escape"`.
+## Open questions for proposal
 
-## Open Questions for Proposal
-
-1. **Grid columns**: 10 per row is standard. For chapters (≤150) and verses (≤176 in Psalm 119), 10 cols × 15 rows fits comfortably. Lock at 10.
-2. **Verse picker `pageStartIndex`**: when `VersePickerAccepted` lands the cursor on verse N, the page must scroll to show it. Compute as `Math.floor(cursorIndex / VERSES_PER_PAGE) * VERSES_PER_PAGE`. Lock.
-3. **`q` from chapter phase**: quits the app. The user might expect Esc to go back to book picker. Recommend: `Esc` goes back to book phase from chapter phase (clears `bookChosen`, restores book suggestions if query non-empty). Adds one more action `PickerBackedOut`. Small addition.
-
-## Ready for Proposal
-
-Yes. The state machine is concrete; the lazy verse list resolves the data question; the picker overlay pattern reuses the verse-cursor accent styling.
+1. Smart filter vs drop-back on QueryTyped in chapter mode (recommend smart filter)
+2. Grid vs column list (grid recommended — matches ui-sketches.md)
+3. Enter on chapter with selectedIndex >= 0: add phase branch in QuerySubmitted or rely on Tab only
+4. Psalms: 15 rows fits without windowing — accept for v1

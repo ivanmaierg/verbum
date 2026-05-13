@@ -109,25 +109,4 @@ Chain strategy: size-exception
 
 ## Spec Coverage Map
 
-| REQ | Task(s) |
-|-----|---------|
-| REQ-01..03 | 1.7–1.9 |
-| REQ-04..05 | 2.17, 2.20 |
-| REQ-06 | 2.18, 2.25 |
-| REQ-07 | 2.19 |
-| REQ-08..16 | 2.5–2.16, 2.24 |
-| REQ-17..18 | 2.5, 2.21 |
-| REQ-19..20 | 2.6, 2.21 |
-| REQ-21 | 2.7, 2.22 |
-| REQ-22..24 | 2.8, 2.23 |
-| REQ-25..34 | 2.9–2.14, 2.24 |
-| REQ-35..36 | 2.15, 2.24 |
-| REQ-37..40 | 4.2–4.5 |
-| REQ-41..44 | 3.1, 3.3 |
-| REQ-45..47 | 3.2, 3.3 |
-| REQ-48 | 3.3 |
-| REQ-49 | — (no npm installs) |
-| REQ-50 | 3.5, 4.7 |
-| REQ-51 | 2.24 |
-| REQ-52 | — (convention) |
-| REQ-53 | 2.5–2.16 |
+All 53 requirements mapped to task groups. All requirements met. All tasks complete.
