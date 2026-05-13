@@ -4,6 +4,14 @@
 
 export type TranslationId = string & { readonly __brand: "TranslationId" };
 
+export interface Translation {
+  id: TranslationId;
+  name: string;
+  language: string;
+  languageEnglishName: string;
+  textDirection: "ltr" | "rtl";
+}
+
 // v1: no validation — the caller is always internal and trusted.
 // Future: validate against BibleRepository.getTranslations().
 export function makeTranslationId(s: string): TranslationId {
